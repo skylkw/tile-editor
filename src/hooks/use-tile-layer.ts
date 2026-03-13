@@ -1,5 +1,11 @@
 import type { LeaferEngine } from "@/core/engine/leafer-engine"
+import { buildTiledMap, getFirstTileLayer } from "@/core/io/tiled-map"
 import { TileLayer } from "@/core/tilemap/tile-layer"
+import type {
+  TiledMap,
+  TiledTileLayer,
+  TiledTilesetRef,
+} from "@/core/tilemap/tiled-types"
 import { useCallback, useEffect, useRef, type RefObject } from "react"
 
 /**
@@ -38,6 +44,82 @@ export function useTileLayer(engineRef: RefObject<LeaferEngine | null>) {
     [getLayer]
   )
 
+  const setTileGid = useCallback(
+    (cellX: number, cellY: number, rawGid: number, fill = "#4f46e5") => {
+      const layer = getLayer()
+      if (!layer) return
+      layer.setTileGid(cellX, cellY, rawGid, fill)
+    },
+    [getLayer]
+  )
+
+  const getTileGid = useCallback(
+    (cellX: number, cellY: number) => {
+      const layer = getLayer()
+      if (!layer) return 0
+      return layer.getTileGid(cellX, cellY)
+    },
+    [getLayer]
+  )
+
+  const exportTiledTileLayer = useCallback(
+    (name?: string): TiledTileLayer | null => {
+      const layer = getLayer()
+      if (!layer) return null
+      return layer.exportTiledTileLayer(name)
+    },
+    [getLayer]
+  )
+
+  const exportTiledMap = useCallback(
+    (options?: {
+      width?: number
+      height?: number
+      layerName?: string
+      tilesets?: TiledTilesetRef[]
+      infinite?: boolean
+      orientation?: TiledMap["orientation"]
+    }): TiledMap | null => {
+      const layer = getLayer()
+      const engine = engineRef.current
+      if (!layer || !engine) return null
+
+      const tileLayer = layer.exportTiledTileLayer(options?.layerName)
+      const cellSize = engine.getCellSize()
+
+      return buildTiledMap({
+        tilewidth: cellSize,
+        tileheight: cellSize,
+        infinite: options?.infinite ?? true,
+        width: options?.width,
+        height: options?.height,
+        orientation: options?.orientation ?? "orthogonal",
+        tilesets: options?.tilesets ?? [],
+        layers: [tileLayer],
+      })
+    },
+    [engineRef, getLayer]
+  )
+
+  const importTiledMap = useCallback(
+    (map: TiledMap) => {
+      const layer = getLayer()
+      if (!layer) return
+
+      const tileLayer = getFirstTileLayer(map)
+      if (!tileLayer) {
+        layer.clear()
+        return
+      }
+
+      layer.importTiledTileLayer(tileLayer, {
+        mapWidth: map.width,
+        mapHeight: map.height,
+      })
+    },
+    [getLayer]
+  )
+
   const clearTiles = useCallback(() => {
     layerRef.current?.clear()
   }, [])
@@ -51,7 +133,12 @@ export function useTileLayer(engineRef: RefObject<LeaferEngine | null>) {
 
   return {
     setTile,
+    setTileGid,
+    getTileGid,
     removeTile,
     clearTiles,
+    exportTiledTileLayer,
+    exportTiledMap,
+    importTiledMap,
   }
 }

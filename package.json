@@ -18,6 +18,7 @@
     "@leafer-ui/core": "^2.0.3",
     "@leafer-ui/draw": "^2.0.3",
     "@tailwindcss/vite": "^4.1.17",
+    "@tauri-apps/api": "^2.10.1",
     "@tauri-apps/plugin-dialog": "~2.6.0",
     "@tauri-apps/plugin-fs": "~2.4.5",
     "class-variance-authority": "^0.7.1",

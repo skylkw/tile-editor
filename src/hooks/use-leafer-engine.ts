@@ -10,7 +10,16 @@ export function useLeaferEngine() {
   const viewRef = useRef<HTMLDivElement | null>(null)
   const engineRef = useRef<LeaferEngine | null>(null)
 
-  const { setTile, removeTile, clearTiles } = useTileLayer(engineRef)
+  const {
+    setTile,
+    setTileGid,
+    getTileGid,
+    removeTile,
+    clearTiles,
+    exportTiledTileLayer,
+    exportTiledMap,
+    importTiledMap,
+  } = useTileLayer(engineRef)
 
   useEffect(() => {
     if (!viewRef.current) return
@@ -77,7 +86,12 @@ export function useLeaferEngine() {
     viewRef,
     engineRef,
     setTile,
+    setTileGid,
+    getTileGid,
     removeTile,
     clearTiles,
+    exportTiledTileLayer,
+    exportTiledMap,
+    importTiledMap,
   }
 }
