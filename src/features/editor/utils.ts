@@ -12,8 +12,8 @@ import type {
 } from "./types"
 
 export const DEFAULT_DOCUMENT: DocumentSettings = {
-  width: 4096,
-  height: 4096,
+  cols: 128,
+  rows: 128,
   cellSize: 32,
   majorLineEvery: 8,
 }
@@ -222,8 +222,8 @@ export function getDocumentConfigFromMap(map: TiledMap): DocumentSettings | null
   if (map.tilewidth !== map.tileheight) return null
 
   return {
-    width: map.width * map.tilewidth,
-    height: map.height * map.tileheight,
+    cols: map.width,
+    rows: map.height,
     cellSize: map.tilewidth,
     majorLineEvery: DEFAULT_DOCUMENT.majorLineEvery,
   }

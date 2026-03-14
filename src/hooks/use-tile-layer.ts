@@ -101,7 +101,7 @@ export function useTileLayer(engineRef: RefObject<LeaferEngine | null>) {
       if (!layer || !engine) return null
 
       const tileLayer = layer.exportTiledTileLayer(options?.layerName)
-      const metrics = engine.getMapMetrics()
+      const metrics = engine.getGrid()
 
       return buildTiledMap({
         tilewidth: metrics.cellSize,

@@ -1,6 +1,6 @@
 export type DocumentSettings = {
-  width: number
-  height: number
+  cols: number
+  rows: number
   cellSize: number
   majorLineEvery: number
 }

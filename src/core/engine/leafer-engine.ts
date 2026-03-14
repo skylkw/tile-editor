@@ -10,29 +10,19 @@ import {
 import type {
   CameraState,
   CreateLeaferEngineOptions,
+  Grid,
   GridCell,
   GridOptions,
-  MapMetrics,
-  ResolvedGridOptions,
   ViewportOptions,
   WorldPoint,
 } from "./types"
 
-export type {
-  CameraState,
-  CreateLeaferEngineOptions,
-  GridCell,
-  GridOptions,
-  MapMetrics,
-  ViewportOptions,
-  WorldPoint,
-}
 
 const DEFAULT_VIEWPORT_OPTIONS: Required<ViewportOptions> = {
   zoomMin: 0.1,
   zoomMax: 16,
   zoomStep: 1.1,
-  fitPadding: 48,
+  fitPadding: { top: 48, right: 48, bottom: 48, left: 48 },
 }
 
 /**
@@ -43,7 +33,8 @@ const DEFAULT_VIEWPORT_OPTIONS: Required<ViewportOptions> = {
  */
 export class LeaferEngine {
   private readonly app: App
-  private gridOptions: ResolvedGridOptions
+  private readonly gridRenderer: GridRenderer
+  private gridOptions: Grid
   private readonly viewportOptions: Required<ViewportOptions>
   private readonly cameraController: CameraController
   private readonly groundWorldLayer: Group
@@ -52,7 +43,6 @@ export class LeaferEngine {
   private readonly gridLayer: Group
   private readonly contentLayer: Group
   private readonly overlayLayer: Group
-  private readonly gridRenderer: GridRenderer
   private resizeObserver: ResizeObserver | null = null
 
   constructor(options: CreateLeaferEngineOptions) {
@@ -164,9 +154,8 @@ export class LeaferEngine {
     return this.gridOptions
   }
 
-  public getMapMetrics(): MapMetrics {
-    const { width, height, cellSize, cols, rows } = this.gridOptions
-    return { width, height, cellSize, cols, rows }
+  public getGrid(): Grid {
+    return this.gridOptions
   }
 
   public getCellSize() {
@@ -198,7 +187,12 @@ export class LeaferEngine {
   }
 
   public isInsideWorld(x: number, y: number) {
-    return x >= 0 && y >= 0 && x < this.gridOptions.width && y < this.gridOptions.height
+    return (
+      x >= 0 &&
+      y >= 0 &&
+      x < this.gridOptions.width &&
+      y < this.gridOptions.height
+    )
   }
 
   public worldToCell(x: number, y: number): GridCell {

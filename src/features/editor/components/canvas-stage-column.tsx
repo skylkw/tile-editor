@@ -1,14 +1,9 @@
-import type { GridCell } from "@/core/engine/leafer-engine"
+import type { Grid, GridCell } from "@/core/engine/types"
 import type { RefObject } from "react"
 
 type CanvasStageColumnProps = {
   viewRef: RefObject<HTMLDivElement | null>
-  mapMetrics: {
-    width: number
-    height: number
-    cols: number
-    rows: number
-  }
+  mapMetrics: Grid
   cameraScale: number
   hoverCell: GridCell | null
   activeLayerName: string

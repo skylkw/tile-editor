@@ -1,12 +1,12 @@
 import { Group, Rect } from "leafer-ui"
 import type {
+  Grid,
   GridCell,
   GridOptions,
-  ResolvedGridOptions,
   WorldPoint,
 } from "../types"
 
-export const DEFAULT_GRID_OPTIONS: ResolvedGridOptions = {
+export const DEFAULT_GRID_OPTIONS: Grid = {
   width: 4096,
   height: 4096,
   cellSize: 32,
@@ -33,53 +33,23 @@ function requirePositiveInteger(name: string, value: number) {
 /**
  * 合并并校验网格配置，得到统一的有限画布尺寸。
  */
-export function resolveGridOptions(options?: GridOptions): ResolvedGridOptions {
+export function resolveGridOptions(options?: GridOptions): Grid {
   const cellSize = requirePositiveInteger(
     "cellSize",
     options?.cellSize ?? DEFAULT_GRID_OPTIONS.cellSize
   )
 
-  const colsFromOptions =
-    options?.cols !== undefined
-      ? requirePositiveInteger("cols", options.cols)
-      : undefined
-  const rowsFromOptions =
-    options?.rows !== undefined
-      ? requirePositiveInteger("rows", options.rows)
-      : undefined
-
-  const widthFromCells =
-    colsFromOptions !== undefined ? colsFromOptions * cellSize : undefined
-  const heightFromCells =
-    rowsFromOptions !== undefined ? rowsFromOptions * cellSize : undefined
-
-  const width = requirePositiveInteger(
-    "width",
-    options?.width ?? widthFromCells ?? DEFAULT_GRID_OPTIONS.width
+  const cols = requirePositiveInteger(
+    "cols",
+    options?.cols ?? DEFAULT_GRID_OPTIONS.cols
   )
-  const height = requirePositiveInteger(
-    "height",
-    options?.height ?? heightFromCells ?? DEFAULT_GRID_OPTIONS.height
+  const rows = requirePositiveInteger(
+    "rows",
+    options?.rows ?? DEFAULT_GRID_OPTIONS.rows
   )
 
-  if (width % cellSize !== 0) {
-    throw new Error("width 必须是 cellSize 的整数倍")
-  }
-
-  if (height % cellSize !== 0) {
-    throw new Error("height 必须是 cellSize 的整数倍")
-  }
-
-  const cols = colsFromOptions ?? width / cellSize
-  const rows = rowsFromOptions ?? height / cellSize
-
-  if (width !== cols * cellSize) {
-    throw new Error("width 与 cols * cellSize 不一致")
-  }
-
-  if (height !== rows * cellSize) {
-    throw new Error("height 与 rows * cellSize 不一致")
-  }
+  const width = cols * cellSize
+  const height = rows * cellSize
 
   return {
     width,
@@ -146,7 +116,7 @@ export class GridRenderer {
     this.parent = parent
   }
 
-  public render(options: ResolvedGridOptions) {
+  public render(options: Grid) {
     this.clear()
 
     const {

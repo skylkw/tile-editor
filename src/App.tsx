@@ -421,29 +421,19 @@ export default function App() {
 
   const handleApplyDocument = useCallback(async () => {
     const nextConfig = {
-      width: Number(draftConfig.width),
-      height: Number(draftConfig.height),
+      cols: Number(draftConfig.cols),
+      rows: Number(draftConfig.rows),
       cellSize: Number(draftConfig.cellSize),
       majorLineEvery: Number(draftConfig.majorLineEvery),
     }
 
     if (
-      !isPositiveInteger(nextConfig.width) ||
-      !isPositiveInteger(nextConfig.height) ||
+      !isPositiveInteger(nextConfig.cols) ||
+      !isPositiveInteger(nextConfig.rows) ||
       !isPositiveInteger(nextConfig.cellSize) ||
       !isPositiveInteger(nextConfig.majorLineEvery)
     ) {
-      setErrorMessage("画布宽高、单元大小和主网格间隔都必须是正整数")
-      return
-    }
-
-    if (nextConfig.width % nextConfig.cellSize !== 0) {
-      setErrorMessage("画布宽度必须能被 cellSize 整除")
-      return
-    }
-
-    if (nextConfig.height % nextConfig.cellSize !== 0) {
-      setErrorMessage("画布高度必须能被 cellSize 整除")
+      setErrorMessage("网格行列、单元大小和主网格间隔都必须是正整数")
       return
     }
 
@@ -603,8 +593,8 @@ export default function App() {
     const targetConfig = getDocumentConfigFromMap(pendingImportedMap)
     if (
       targetConfig &&
-      (mapMetrics.width !== targetConfig.width ||
-        mapMetrics.height !== targetConfig.height ||
+      (mapMetrics.cols !== targetConfig.cols ||
+        mapMetrics.rows !== targetConfig.rows ||
         mapMetrics.cellSize !== targetConfig.cellSize)
     ) {
       return

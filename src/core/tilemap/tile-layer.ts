@@ -1,5 +1,5 @@
 import type { LeaferEngine } from "@/core/engine/leafer-engine"
-import type { MapMetrics } from "@/core/engine/types"
+import type { Grid } from "@/core/engine/types"
 import { readTileLayerCells } from "@/core/io/tiled-map"
 import { Group, Image, Rect } from "leafer-ui"
 import { decodeTiledGid, encodeTiledGid } from "./tiled-gid"
@@ -25,7 +25,7 @@ export class TileLayer {
   private engine: LeaferEngine
   private tilesets: Tileset[] = []
   private layerGroup: Group
-  private metrics: MapMetrics
+  private metrics: Grid
   private tileData: Uint32Array
   private name: string
   private visible: boolean
@@ -35,7 +35,7 @@ export class TileLayer {
   constructor(engine: LeaferEngine, options: TileLayerOptions = {}) {
     this.id = options.id ?? `layer-${Date.now()}`
     this.engine = engine
-    this.metrics = engine.getMapMetrics()
+    this.metrics = engine.getGrid()
     this.tileData = new Uint32Array(this.metrics.cols * this.metrics.rows)
     this.name = options.name ?? "Tile Layer"
     this.visible = options.visible ?? true
@@ -90,7 +90,7 @@ export class TileLayer {
   }
 
   public resizeToMatchEngine() {
-    const nextMetrics = this.engine.getMapMetrics()
+    const nextMetrics = this.engine.getGrid()
 
     if (
       this.metrics.cols === nextMetrics.cols &&

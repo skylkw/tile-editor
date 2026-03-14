@@ -1,36 +1,13 @@
 /**
- * 网格配置（外部可传入的可选项）。
- * width / height 使用像素单位，cols / rows 使用单元数量。
- * 两组尺寸只需要提供一组；若同时提供，必须保持一致。
+ * 网格数据类型。
+ * width 和 height 是由 cols * cellSize 派生出来的。
  */
-export interface GridOptions {
-  width?: number
-  height?: number
-  cellSize?: number
-  cols?: number
-  rows?: number
-  majorLineEvery?: number
-  backgroundColor?: string
-  minorColor?: string
-  majorColor?: string
-  borderColor?: string
-  lineThickness?: number
-  majorLineThickness?: number
-  borderThickness?: number
-}
-
-export interface MapMetrics {
-  width: number
-  height: number
+export interface Grid {
   cellSize: number
   cols: number
   rows: number
-}
-
-/**
- * 引擎内部实际使用的完整配置。
- */
-export interface ResolvedGridOptions extends MapMetrics {
+  width: number
+  height: number
   majorLineEvery: number
   backgroundColor: string
   minorColor: string
@@ -41,11 +18,24 @@ export interface ResolvedGridOptions extends MapMetrics {
   borderThickness: number
 }
 
+/**
+ * 外部输入：仅用于创建或局部更新。
+ * 注意：输入时不包含计算出的 width/height。
+ */
+export type GridOptions = Partial<Omit<Grid, "width" | "height">>
+
+export type Padding = {
+  top?: number
+  right?: number
+  bottom?: number
+  left?: number
+}
+
 export interface ViewportOptions {
   zoomMin?: number
   zoomMax?: number
   zoomStep?: number
-  fitPadding?: number
+  fitPadding?: Padding
 }
 
 /**

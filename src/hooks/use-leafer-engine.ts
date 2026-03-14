@@ -1,10 +1,9 @@
-import {
-  createLeaferEngine,
-  type CameraState,
-  type GridCell,
-  type GridOptions,
-  type LeaferEngine,
-} from "@/core/engine/leafer-engine"
+import { createLeaferEngine, LeaferEngine } from "@/core/engine/leafer-engine"
+import type {
+  CameraState,
+  GridCell,
+  GridOptions,
+} from "@/core/engine/types"
 import { resolveGridOptions } from "@/core/engine/grid"
 import { buildTiledMap } from "@/core/io/tiled-map"
 import { TileLayer } from "@/core/tilemap/tile-layer"
@@ -32,10 +31,10 @@ export interface EditorLayerState {
 type StampPreviewNode = Image | Rect
 
 const DEFAULT_DOCUMENT: Required<
-  Pick<GridOptions, "width" | "height" | "cellSize" | "majorLineEvery">
+  Pick<GridOptions, "cols" | "rows" | "cellSize" | "majorLineEvery">
 > = {
-  width: 4096,
-  height: 4096,
+  cols: 128,
+  rows: 128,
   cellSize: 32,
   majorLineEvery: 8,
 }
@@ -100,8 +99,8 @@ export function useLeaferEngine(options: UseLeaferEngineOptions = {}) {
   const [revision, setRevision] = useState(0)
   const [savedRevision, setSavedRevision] = useState(0)
 
-  const documentWidth = options.document?.width ?? DEFAULT_DOCUMENT.width
-  const documentHeight = options.document?.height ?? DEFAULT_DOCUMENT.height
+  const cols = options.document?.cols ?? DEFAULT_DOCUMENT.cols
+  const rows = options.document?.rows ?? DEFAULT_DOCUMENT.rows
   const cellSize = options.document?.cellSize ?? DEFAULT_DOCUMENT.cellSize
   const majorLineEvery =
     options.document?.majorLineEvery ?? DEFAULT_DOCUMENT.majorLineEvery
@@ -110,12 +109,12 @@ export function useLeaferEngine(options: UseLeaferEngineOptions = {}) {
     () =>
       resolveGridOptions({
         ...options.document,
-        width: documentWidth,
-        height: documentHeight,
+        cols,
+        rows,
         cellSize,
         majorLineEvery,
       }),
-    [cellSize, documentHeight, documentWidth, majorLineEvery, options.document]
+    [cellSize, cols, majorLineEvery, options.document, rows]
   )
 
   const activeLayer = useMemo(
@@ -575,7 +574,7 @@ export function useLeaferEngine(options: UseLeaferEngineOptions = {}) {
       const tileLayers = exportTiledTileLayers()
       if (!tileLayers.length) return null
 
-      const metrics = engineRef.current?.getMapMetrics() ?? resolvedDocument
+      const metrics = engineRef.current?.getGrid() ?? resolvedDocument
       const tilesets =
         options?.tilesets ??
         tilesetsRef.current.map((tileset) => tileset.toTiledTilesetRef())
@@ -644,7 +643,7 @@ export function useLeaferEngine(options: UseLeaferEngineOptions = {}) {
         zoomMin: 0.1,
         zoomMax: 24,
         zoomStep: 1.1,
-        fitPadding: 48,
+        fitPadding: { top: 48, right: 48, bottom: 48, left: 48 },
       },
     })
 
@@ -708,7 +707,7 @@ export function useLeaferEngine(options: UseLeaferEngineOptions = {}) {
       const stamp = activeStampRef.current
       if (!stamp?.cells.length) return []
 
-      const metrics = engine.getMapMetrics()
+      const metrics = engine.getGrid()
       const keys: string[] = []
 
       for (const stampCell of stamp.cells) {

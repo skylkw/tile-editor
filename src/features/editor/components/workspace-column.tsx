@@ -95,14 +95,14 @@ export function WorkspaceColumn(props: WorkspaceColumnProps) {
       >
         <div className="grid grid-cols-2 gap-3">
           <NumberField
-            label="Canvas Width"
-            value={props.draftConfig.width}
-            onChange={(value) => props.onDraftChange("width", value)}
+            label="Cols"
+            value={props.draftConfig.cols}
+            onChange={(value) => props.onDraftChange("cols", value)}
           />
           <NumberField
-            label="Canvas Height"
-            value={props.draftConfig.height}
-            onChange={(value) => props.onDraftChange("height", value)}
+            label="Rows"
+            value={props.draftConfig.rows}
+            onChange={(value) => props.onDraftChange("rows", value)}
           />
           <NumberField
             label="Cell Size"
