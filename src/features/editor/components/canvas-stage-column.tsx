@@ -1,9 +1,9 @@
-import type { Grid, GridCell } from "@/core/engine/types"
+import type { GridMetrics, GridCell } from "@/types/engine"
 import type { RefObject } from "react"
 
 type CanvasStageColumnProps = {
   viewRef: RefObject<HTMLDivElement | null>
-  mapMetrics: Grid
+  mapMetrics: GridMetrics
   cameraScale: number
   hoverCell: GridCell | null
   activeLayerName: string

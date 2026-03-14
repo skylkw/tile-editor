@@ -1,4 +1,4 @@
-import type { TiledChunk } from "./tiled-types"
+import type { TiledChunk } from "@/types/tiled"
 
 type TileChunk = {
   x: number

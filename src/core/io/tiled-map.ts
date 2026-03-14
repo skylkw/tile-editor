@@ -2,7 +2,7 @@ import type {
   TiledMap,
   TiledTileLayer,
   TiledTilesetRef,
-} from "@/core/tilemap/tiled-types"
+} from "@/types/tiled"
 
 export type TiledMapBuildOptions = {
   tilewidth: number

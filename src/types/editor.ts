@@ -1,16 +1,8 @@
-export type DocumentSettings = {
-  cols: number
-  rows: number
-  cellSize: number
-  majorLineEvery: number
-  backgroundColor: string
-  minorColor: string
-  majorColor: string
-  borderColor: string
-  lineThickness: number
-  majorLineThickness: number
-  borderThickness: number
-}
+import type {
+  GridConfig,
+  CameraState,
+  ViewportConfig,
+} from "./engine"
 
 export type ImageBounds = {
   x: number
@@ -35,7 +27,7 @@ export type BrushTransformState = {
   flipD: boolean
 }
 
-export type ThemeSettings = {
+export type ThemeConfig = {
   hoverOutline: {
     fill: string
     stroke: string
@@ -48,11 +40,11 @@ export type ThemeSettings = {
   }
 }
 
-export type LayerSettings = {
+export type LayerConfig = {
   defaultNamePrefix: string
 }
 
-export type ShortcutSettings = {
+export type ShortcutConfig = {
   paintButton: number
   eraseButton: number
   panButton: number
@@ -61,10 +53,10 @@ export type ShortcutSettings = {
 }
 
 export type AppConfig = {
-  camera: { x: number; y: number; scale: number }
-  viewport: any // Will import ViewportOptions where used or define broadly
-  document: DocumentSettings
-  theme: ThemeSettings
-  layer: LayerSettings
-  shortcuts: ShortcutSettings
+  camera: CameraState
+  viewport: ViewportConfig
+  document: GridConfig
+  theme: ThemeConfig
+  layer: LayerConfig
+  shortcuts: ShortcutConfig
 }

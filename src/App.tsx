@@ -9,8 +9,8 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react"
 import config from "./config.json"
-import type { ViewportConfig } from "./core/engine/types"
-import type { TiledMap } from "./core/tilemap/tiled-types"
+import type { GridConfig, ViewportConfig } from "@/types/engine"
+import type { TiledMap } from "@/types/tiled"
 import type { TilesetStamp, TilesetTileDescriptor } from "./core/tilemap/tileset"
 import { Tileset } from "./core/tilemap/tileset"
 import {
@@ -23,10 +23,9 @@ import {
 } from "./features/editor/components"
 import type {
   BrushTransformState,
-  DocumentSettings,
   ImageBounds,
   TilesetLoadSource,
-} from "./features/editor/types"
+} from "@/types/editor"
 import {
   DEFAULT_BRUSH_TRANSFORM,
   clamp,
@@ -55,8 +54,8 @@ async function createObjectUrlFromPath(path: string) {
 
 export default function App() {
   const [documentConfig, setDocumentConfig] =
-    useState<DocumentSettings>(config.document)
-  const [draftConfig, setDraftConfig] = useState<DocumentSettings>(config.document)
+    useState<GridConfig>(config.document)
+  const [draftConfig, setDraftConfig] = useState<GridConfig>(config.document)
   const [mapPath, setMapPath] = useState("")
   const [activeTilesetKey, setActiveTilesetKey] = useState("")
   const [activeGid, setActiveGid] = useState(1)
@@ -248,7 +247,7 @@ export default function App() {
   }, [])
 
   const handleDraftChange = useCallback(
-    (key: keyof DocumentSettings, value: number) => {
+    (key: keyof GridConfig, value: number) => {
       setDraftConfig((current) => ({
         ...current,
         [key]: value,
@@ -434,7 +433,7 @@ export default function App() {
   ])
 
   const handleApplyDocument = useCallback(async () => {
-    const nextConfig: DocumentSettings = {
+    const nextConfig: GridConfig = {
       ...draftConfig,
       cols: Number(draftConfig.cols),
       rows: Number(draftConfig.rows),

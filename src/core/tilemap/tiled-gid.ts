@@ -1,4 +1,4 @@
-import type { TiledTilesetRef } from "./tiled-types"
+import type { TiledTilesetRef } from "@/types/tiled"
 
 export const GID_FLIP_HORIZONTAL = 0x80000000
 export const GID_FLIP_VERTICAL = 0x40000000

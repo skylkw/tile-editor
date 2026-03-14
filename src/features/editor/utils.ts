@@ -3,13 +3,13 @@ import {
   encodeTiledGid,
   type TiledGidFlags,
 } from "@/core/tilemap/tiled-gid"
-import type { TiledMap, TiledTilesetRef } from "@/core/tilemap/tiled-types"
+import type { TiledMap, TiledTilesetRef } from "@/types/tiled"
 import type { TilesetStamp, TilesetTileDescriptor } from "@/core/tilemap/tileset"
 import type {
   BrushTransformState,
-  DocumentSettings,
   ImageBounds,
-} from "./types"
+} from "@/types/editor"
+import type { GridConfig } from "@/types/engine"
 import config from "@/config.json"
 
 export const DEFAULT_BRUSH_TRANSFORM: BrushTransformState = {
@@ -211,7 +211,7 @@ export function resolveTilesetSourcePath(
   return joinPath(mapDir, candidate)
 }
 
-export function getDocumentConfigFromMap(map: TiledMap): DocumentSettings | null {
+export function getDocumentConfigFromMap(map: TiledMap): GridConfig | null {
   if (!map.width || !map.height || !map.tilewidth || !map.tileheight) return null
   if (map.tilewidth !== map.tileheight) return null
 

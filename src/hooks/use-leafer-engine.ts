@@ -5,7 +5,7 @@ import type {
   GridConfig,
   GridMetrics,
   ViewportConfig,
-} from "@/core/engine/types"
+} from "@/types/engine"
 import { buildTiledMap } from "@/core/io/tiled-map"
 import { TileLayer } from "@/core/tilemap/tile-layer"
 import { clearTiledGidFlags } from "@/core/tilemap/tiled-gid"
@@ -13,7 +13,7 @@ import type {
   TiledMap,
   TiledTileLayer,
   TiledTilesetRef,
-} from "@/core/tilemap/tiled-types"
+} from "@/types/tiled"
 import type { Tileset, TilesetStamp } from "@/core/tilemap/tileset"
 import { Group, Image, Rect } from "leafer-ui"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"

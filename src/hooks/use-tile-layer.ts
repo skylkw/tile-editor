@@ -5,7 +5,7 @@ import type {
   TiledMap,
   TiledTileLayer,
   TiledTilesetRef,
-} from "@/core/tilemap/tiled-types"
+} from "@/types/tiled"
 import { useCallback, useEffect, useRef, type RefObject } from "react"
 
 import type { Tileset } from "@/core/tilemap/tileset"

@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button"
 import type { ChangeEvent } from "react"
-import type { DocumentSettings } from "../types"
+import type { GridConfig } from "@/types/engine"
 import { PanelCard } from "./panel-card"
 
 type WorkspaceColumnProps = {
@@ -8,7 +8,7 @@ type WorkspaceColumnProps = {
   isDirty: boolean
   revision: number
   loadingMapIO: boolean
-  draftConfig: DocumentSettings
+  draftConfig: GridConfig
   mapMetrics: {
     cols: number
     rows: number
@@ -16,7 +16,7 @@ type WorkspaceColumnProps = {
   onImportMap: () => void
   onExportMap: () => void
   onApplyDocument: () => void
-  onDraftChange: (key: keyof DocumentSettings, value: number) => void
+  onDraftChange: (key: keyof GridConfig, value: number) => void
 }
 
 function NumberField(props: {

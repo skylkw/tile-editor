@@ -4,7 +4,7 @@ import type {
   GridConfig,
   GridCell,
   WorldPoint,
-} from "./types"
+} from "@/types/engine"
 
 /**
  * 将网格坐标转换为唯一字符串标识符，常用于 Map 索引。

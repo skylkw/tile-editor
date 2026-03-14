@@ -13,7 +13,7 @@ import type {
   GridCell,
   ViewportConfig,
   WorldPoint,
-} from "./types"
+} from "@/types/engine"
 
 /**
  * LeaferEngine - 基于 LeaferJS 的核心编辑器渲染引擎。

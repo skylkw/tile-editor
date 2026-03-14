@@ -1,4 +1,4 @@
-import type { TiledTilesetRef } from "./tiled-types"
+import type { TiledTilesetRef } from "@/types/tiled"
 import { clearTiledGidFlags, decodeTiledGid } from "./tiled-gid"
 
 export interface TilesetOptions {

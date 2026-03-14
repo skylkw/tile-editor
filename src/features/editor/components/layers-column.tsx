@@ -109,18 +109,7 @@ export function LayersColumn(props: LayersColumnProps) {
         </div>
       </PanelCard>
 
-      <PanelCard
-        title="Controls"
-        description="连续绘制时，如果本次笔划里的 stamp 足迹发生重叠，预览会变色并阻止重复绘制。"
-      >
-        <div className="space-y-2 text-xs leading-6 text-slate-400">
-          <p>Left Click / Drag: 在当前图层按无重叠规则连续绘制 stamp</p>
-          <p>Right Click / Drag: 按同样规则擦除 stamp 足迹</p>
-          <p>Middle Drag 或 Space + Left Drag: 平移画布</p>
-          <p>Mouse Wheel: 以鼠标位置为中心缩放</p>
-          <p>Tileset Preview Drag: 框选 tileset 区域并生成 stamp</p>
-        </div>
-      </PanelCard>
+
     </div>
   )
 }

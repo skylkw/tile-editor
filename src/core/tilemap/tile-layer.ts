@@ -1,9 +1,9 @@
 import type { LeaferEngine } from "@/core/engine/leafer-engine"
-import type { Grid } from "@/core/engine/types"
+import type { GridMetrics } from "@/types/engine"
 import { readTileLayerCells } from "@/core/io/tiled-map"
 import { Group, Image, Rect } from "leafer-ui"
 import { decodeTiledGid, encodeTiledGid } from "./tiled-gid"
-import type { TiledTileLayer } from "./tiled-types"
+import type { TiledTileLayer } from "@/types/tiled"
 import type { Tileset } from "./tileset"
 
 type TileNode = Image | Rect
@@ -25,7 +25,7 @@ export class TileLayer {
   private engine: LeaferEngine
   private tilesets: Tileset[] = []
   private layerGroup: Group
-  private metrics: Grid
+  private metrics: GridMetrics
   private tileData: Uint32Array
   private name: string
   private visible: boolean
