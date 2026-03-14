@@ -1,4 +1,5 @@
 import type { TiledTilesetRef } from "./tiled-types"
+import { clearTiledGidFlags, decodeTiledGid } from "./tiled-gid"
 
 export interface TilesetOptions {
   name: string
@@ -153,7 +154,8 @@ export class Tileset {
   }
 
   public getTileDescriptor(gid: number) {
-    return this.tiles.find((tile) => tile.gid === gid) ?? null
+    const resolvedGid = clearTiledGidFlags(gid)
+    return this.tiles.find((tile) => tile.gid === resolvedGid) ?? null
   }
 
   public createStamp(gids: number[]): TilesetStamp | null {
@@ -231,10 +233,12 @@ export class Tileset {
   }
 
   public getTileImageUrl(gid: number) {
-    const cached = this.tileUrlCache.get(gid)
+    const decoded = decodeTiledGid(gid)
+    const rawGid = decoded.raw
+    const cached = this.tileUrlCache.get(rawGid)
     if (cached) return cached
 
-    const rect = this.getTileRect(gid)
+    const rect = this.getTileRect(decoded.gid)
     if (!rect) return null
 
     const canvas = document.createElement("canvas")
@@ -246,6 +250,7 @@ export class Tileset {
 
     context.imageSmoothingEnabled = false
     context.clearRect(0, 0, canvas.width, canvas.height)
+    this.applyTiledTransform(context, decoded)
     context.drawImage(
       this.imageElement,
       rect.x,
@@ -259,7 +264,7 @@ export class Tileset {
     )
 
     const dataUrl = canvas.toDataURL()
-    this.tileUrlCache.set(gid, dataUrl)
+    this.tileUrlCache.set(rawGid, dataUrl)
     return dataUrl
   }
 
@@ -275,5 +280,55 @@ export class Tileset {
       spacing: this.spacing,
       margin: this.margin,
     }
+  }
+
+  private applyTiledTransform(
+    context: CanvasRenderingContext2D,
+    decoded: ReturnType<typeof decodeTiledGid>
+  ) {
+    const size = this.tileWidth
+    let a = 1
+    let b = 0
+    let c = 0
+    let d = 1
+    let e = 0
+    let f = 0
+
+    const multiply = (
+      nextA: number,
+      nextB: number,
+      nextC: number,
+      nextD: number,
+      nextE: number,
+      nextF: number
+    ) => {
+      const currentA = a
+      const currentB = b
+      const currentC = c
+      const currentD = d
+      const currentE = e
+      const currentF = f
+
+      a = nextA * currentA + nextC * currentB
+      b = nextB * currentA + nextD * currentB
+      c = nextA * currentC + nextC * currentD
+      d = nextB * currentC + nextD * currentD
+      e = nextA * currentE + nextC * currentF + nextE
+      f = nextB * currentE + nextD * currentF + nextF
+    }
+
+    if (decoded.flipD) {
+      multiply(0, 1, 1, 0, 0, 0)
+    }
+
+    if (decoded.flipH) {
+      multiply(-1, 0, 0, 1, size, 0)
+    }
+
+    if (decoded.flipV) {
+      multiply(1, 0, 0, -1, 0, size)
+    }
+
+    context.setTransform(a, b, c, d, e, f)
   }
 }

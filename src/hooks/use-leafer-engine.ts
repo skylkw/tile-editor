@@ -8,6 +8,7 @@ import {
 import { resolveGridOptions } from "@/core/engine/grid"
 import { buildTiledMap } from "@/core/io/tiled-map"
 import { TileLayer } from "@/core/tilemap/tile-layer"
+import { clearTiledGidFlags } from "@/core/tilemap/tiled-gid"
 import type {
   TiledMap,
   TiledTileLayer,
@@ -154,7 +155,11 @@ export function useLeaferEngine(options: UseLeaferEngineOptions = {}) {
   }, [])
 
   const getTilesetForGid = useCallback((gid: number) => {
-    return tilesetsRef.current.find((tileset) => tileset.containsGid(gid)) ?? null
+    const resolvedGid = clearTiledGidFlags(gid)
+    return (
+      tilesetsRef.current.find((tileset) => tileset.containsGid(resolvedGid)) ??
+      null
+    )
   }, [])
 
   const syncLayerOrdering = useCallback(() => {

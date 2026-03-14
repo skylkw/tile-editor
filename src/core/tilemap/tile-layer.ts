@@ -254,9 +254,7 @@ export class TileLayer {
     const size = this.engine.getCellSize()
     const decoded = decodeTiledGid(rawGid)
 
-    const tileImageUrl = this.getTilesetForGid(decoded.gid)?.getTileImageUrl(
-      decoded.gid
-    )
+    const tileImageUrl = this.getTilesetForGid(decoded.gid)?.getTileImageUrl(rawGid)
     const node: TileNode = tileImageUrl
       ? new Image({
           x: world.x,
@@ -266,15 +264,6 @@ export class TileLayer {
           url: tileImageUrl,
         })
       : this.createFallbackRect(world.x, world.y, size, decoded.gid)
-
-    if (decoded.flipH || decoded.flipV) {
-      node.set({
-        x: world.x + (decoded.flipH ? size : 0),
-        y: world.y + (decoded.flipV ? size : 0),
-        scaleX: decoded.flipH ? -1 : 1,
-        scaleY: decoded.flipV ? -1 : 1,
-      })
-    }
 
     this.tiles.set(index, node)
     this.layerGroup.add(node)
