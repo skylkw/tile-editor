@@ -103,7 +103,7 @@ export class LeaferEngine {
     this.gridRenderer.render(this.gridOptions)
 
     // 4. 重置一次视口将网格内容居中铺满
-    this.fitToViewport()
+    // this.fitToViewport()   
     
     // 5. 将自身响应式绑定给浏览器外壳窗口
     this.bindResizeObserver(options.view)

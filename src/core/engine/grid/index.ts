@@ -103,13 +103,9 @@ export class GridRenderer {
     this.parent.add(background)
     this.gridNodes.push(background)
 
-    const shouldRenderMinorLines = cols <= 1024 && rows <= 1024
-
     for (let column = 0; column <= cols; column += 1) {
       const isBorder = column === 0 || column === cols
       const isMajor = column % majorLineEvery === 0
-
-      if (!isBorder && !isMajor && !shouldRenderMinorLines) continue
 
       const thickness = isBorder
         ? borderThickness
@@ -131,8 +127,6 @@ export class GridRenderer {
     for (let row = 0; row <= rows; row += 1) {
       const isBorder = row === 0 || row === rows
       const isMajor = row % majorLineEvery === 0
-
-      if (!isBorder && !isMajor && !shouldRenderMinorLines) continue
 
       const thickness = isBorder
         ? borderThickness
