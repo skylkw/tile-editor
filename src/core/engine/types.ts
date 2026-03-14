@@ -1,13 +1,10 @@
 /**
- * 网格数据类型。
- * width 和 height 是由 cols * cellSize 派生出来的。
+ * 基础网格配置参数（输入）。
  */
-export interface Grid {
+export interface GridConfig {
   cellSize: number
   cols: number
   rows: number
-  width: number
-  height: number
   majorLineEvery: number
   backgroundColor: string
   minorColor: string
@@ -19,10 +16,13 @@ export interface Grid {
 }
 
 /**
- * 创建或配置网格时必须提供的参数。
- * 注意：width 和 height 会自动基于 cols * cellSize 计算得出。
+ * 完整的网格指标（输出/运行时使用）。
+ * 包含自动计算出的 width 和 height。
  */
-export type GridOptions = Omit<Grid, "width" | "height">
+export interface GridMetrics extends GridConfig {
+  width: number
+  height: number
+}
 
 export type Padding = {
   top: number
@@ -31,7 +31,7 @@ export type Padding = {
   left: number
 }
 
-export interface ViewportOptions {
+export interface ViewportConfig {
   zoomMin: number
   zoomMax: number
   zoomStep: number
@@ -42,12 +42,12 @@ export interface ViewportOptions {
 }
 
 /**
- * 引擎创建参数。
+ * 引擎创建配置。
  */
-export interface CreateLeaferEngineOptions {
+export interface LeaferEngineConfig {
   view: HTMLDivElement
-  grid: GridOptions
-  viewport: ViewportOptions
+  grid: GridConfig
+  viewport: ViewportConfig
 }
 
 /**

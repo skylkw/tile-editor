@@ -2,10 +2,10 @@ import { createLeaferEngine, LeaferEngine } from "@/core/engine/leafer-engine"
 import type {
   CameraState,
   GridCell,
-  GridOptions,
-  ViewportOptions,
+  GridConfig,
+  GridMetrics,
+  ViewportConfig,
 } from "@/core/engine/types"
-import { resolveGridOptions } from "@/core/engine/grid"
 import { buildTiledMap } from "@/core/io/tiled-map"
 import { TileLayer } from "@/core/tilemap/tile-layer"
 import { clearTiledGidFlags } from "@/core/tilemap/tiled-gid"
@@ -19,9 +19,9 @@ import { Group, Image, Rect } from "leafer-ui"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import config from "@/config.json"
 
-export interface UseLeaferEngineOptions {
-  document: GridOptions
-  viewport: ViewportOptions
+export interface UseLeaferEngineConfig {
+  document: GridConfig
+  viewport: ViewportConfig
   initialCamera: CameraState
   activeStamp: TilesetStamp | null
 }
@@ -64,7 +64,7 @@ function isTiledTileLayer(layer: TiledMap["layers"][number]): layer is TiledTile
   )
 }
 
-export function useLeaferEngine(options: UseLeaferEngineOptions) {
+export function useLeaferEngine(options: UseLeaferEngineConfig) {
   const { document, viewport, initialCamera, activeStamp } = options
 
   const initialLayerState = useMemo(() => createDefaultLayerState(), [])
@@ -93,14 +93,21 @@ export function useLeaferEngine(options: UseLeaferEngineOptions) {
   const [revision, setRevision] = useState(0)
   const [savedRevision, setSavedRevision] = useState(0)
 
-  const resolvedDocument = useMemo(
-    () =>
-      resolveGridOptions({
-        ...config.document,
-        ...document,
-      }),
-    [document]
-  )
+  const resolvedDocument = useMemo(() => {
+    const base = {
+      ...config.document,
+      ...document,
+    }
+    return {
+      ...base,
+      get width() {
+        return base.cols * base.cellSize
+      },
+      get height() {
+        return base.rows * base.cellSize
+      },
+    } as GridMetrics
+  }, [document])
 
   const activeLayer = useMemo(
     () => layers.find((layer) => layer.id === activeLayerId) ?? null,

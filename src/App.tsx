@@ -8,6 +8,8 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react"
+import config from "./config.json"
+import type { ViewportConfig } from "./core/engine/types"
 import type { TiledMap } from "./core/tilemap/tiled-types"
 import type { TilesetStamp, TilesetTileDescriptor } from "./core/tilemap/tileset"
 import { Tileset } from "./core/tilemap/tileset"
@@ -44,8 +46,6 @@ import {
   transformStamp,
 } from "./features/editor/utils"
 import { useLeaferEngine } from "./hooks/use-leafer-engine"
-import config from "./config.json"
-import type { ViewportOptions } from "./core/engine/types"
 
 async function createObjectUrlFromPath(path: string) {
   const bytes = await readFile(path)
@@ -108,7 +108,7 @@ export default function App() {
     importTiledMap,
   } = useLeaferEngine({
     document: documentConfig,
-    viewport: config.viewport as ViewportOptions,
+    viewport: config.viewport as ViewportConfig,
     initialCamera: config.camera,
     activeStamp: transformedStamp,
   })

@@ -3,30 +3,20 @@ import "@leafer-in/viewport"
 import {
   GridRenderer,
   cellToWorld,
-  resolveGridOptions,
   worldToCell,
 } from "./grid"
 import type {
   CameraState,
-  CreateLeaferEngineOptions,
-  Grid,
+  LeaferEngineConfig,
+  GridMetrics,
+  GridConfig,
   GridCell,
-  GridOptions,
-  ViewportOptions,
+  ViewportConfig,
   WorldPoint,
 } from "./types"
 
 /**
  * LeaferEngine - 基于 LeaferJS 的核心编辑器渲染引擎。
- * 
- * 主要职责与特点：
- * 1. 负责生命周期管理：初始化并持有 `leafer-ui` 的核心 App 对象。
- * 2. 多图层同步架构：
- *    - `ground` 层（地面/背景）：用于渲染网格 (`GridRenderer`)。配置为 `design` 模式，禁止交互探测（`hittable: false`）。
- *    - `tree` 层（内容/活动层）：默认业务图层绘制的载体。配置为 `custom` 视口模式，接管并掌控所有鼠标平移/缩放交互。
- *    - `sky` 层（上层覆盖）：由于渲染悬浮 Stamp预览/选取框/高亮光标 等叠加态 UI。禁止交互探测，随主图层联动。
- * 3. 完美视图联动：内部拦截 `MoveEvent` / `ZoomEvent`，使主层以外的其他层(zoomLayer)执行原子级别的坐标镜像同步。
- * 4. 坐标轴工具：提供完备的 `屏幕坐标 <-> 世界坐标 <-> 网格单元` 的转换和合法性校验。
  */
 export class LeaferEngine {
 
@@ -34,46 +24,41 @@ export class LeaferEngine {
   private readonly app: App
   /** 底层网格线渲染器 */
   private readonly gridRenderer: GridRenderer
-  /** 网格世界配置 (受限的画布规格大小及格子刻度等) */
-  private gridOptions: Grid
+  /** 网格配置 */
+  private gridConfig: GridConfig
   /** 视口限制与边距控制配置 */
-  private readonly viewportOptions: Required<ViewportOptions>
+  private readonly viewportConfig: Required<ViewportConfig>
   /** DOM 容器缩放尺寸监控，保证画布分辨率匹配物理窗口大小 */
   private resizeObserver: ResizeObserver | null = null
 
   /**
    * 通知外部（如 React 组件）视野摄像机变换状态发生变更。
-   * 用于解耦触发 React 端的状态机更新。
    */
   public onCameraChange?: (state: CameraState) => void
 
   /**
    * 初始化引擎
    * 
-   * @param options 创建选项，必须传入对应的 DOM 渲染容器 `#view`
+   * @param config 创建配置，必须传入对应的 DOM 渲染容器 `#view`
    */
-  constructor(options: CreateLeaferEngineOptions) {
-    this.gridOptions = resolveGridOptions(options.grid)
-    this.viewportOptions = options.viewport
+  constructor(config: LeaferEngineConfig) {
+    this.gridConfig = config.grid
+    this.viewportConfig = config.viewport as Required<ViewportConfig>
 
     // 1. 初始化 Leafer App
-    // ground 和 sky 均为从属展示层，所以阻止触发 hit 测试提高性能
-    // tree 作为主操控层挂载 custom 视口类型接管原生拖动逻辑
     this.app = new App({
-      view: options.view,
+      view: config.view,
       ground: { type: 'design', hittable: false },
       tree: { type: 'custom' },
       sky: { type: 'design', hittable: false },
       zoom: {
-        min: this.viewportOptions.zoomMin,
-        max: this.viewportOptions.zoomMax,
+        min: this.viewportConfig.zoomMin,
+        max: this.viewportConfig.zoomMax,
       },
       smooth: true
     })
 
-    // ------------------------------------------
     // 视口平移监听
-    // ------------------------------------------
     this.app.tree.on(MoveEvent.BEFORE_MOVE, (e: MoveEvent) => {
       const { x, y } = this.app.tree.getValidMove(e.moveX, e.moveY)
       this.app.tree.zoomLayer.move(x, y)
@@ -82,9 +67,7 @@ export class LeaferEngine {
 
     this.app.tree.on(MoveEvent.MOVE, () => this.notifyCameraChange())
 
-    // ------------------------------------------
     // 视口缩放监听
-    // ------------------------------------------
     this.app.tree.on(ZoomEvent.BEFORE_ZOOM, (e: ZoomEvent) => {
       const scale = this.app.tree.getValidScale(e.scale)
       this.app.tree.zoomLayer.scaleOfWorld(e, scale)
@@ -93,15 +76,29 @@ export class LeaferEngine {
 
     this.app.tree.on(ZoomEvent.ZOOM, () => this.notifyCameraChange())
 
-    // 3. 构建地基网络层，将实例传递给负责绘制 Grid 的渲染器
+    // 3. 构建地基网络层
     this.gridRenderer = new GridRenderer(this.app.ground)
-    this.gridRenderer.render(this.gridOptions)
+    this.gridRenderer.render(this.gridConfig)
 
     // 4. 重置一次视口将网格内容居中铺满
     this.fitToViewport()
 
-    // 5. 将自身响应式绑定给浏览器外壳窗口
-    this.bindResizeObserver(options.view)
+    // 5. 绑定 ResizeObserver
+    this.bindResizeObserver(config.view)
+  }
+
+  /**
+   * 动态计算属性：内容宽度
+   */
+  public get width(): number {
+    return this.gridConfig.cols * this.gridConfig.cellSize
+  }
+
+  /**
+   * 动态计算属性：内容高度
+   */
+  public get height(): number {
+    return this.gridConfig.rows * this.gridConfig.cellSize
   }
 
   /**
@@ -117,20 +114,18 @@ export class LeaferEngine {
 
   /**
    * 视口边界约束。
-   * 保证缩放后的画布内容矩形至少有一部分留在视口内，
-   * 防止用户把画布完全拖出屏幕。
    */
   private clampToViewport() {
     const { width: vw, height: vh } = this.getViewportSize()
     const zl = this.app.tree.zoomLayer
     const scale = (zl.scaleX as number) || 1
 
-    const contentW = this.gridOptions.width * scale
-    const contentH = this.gridOptions.height * scale
+    const contentW = this.width * scale
+    const contentH = this.height * scale
 
     // 拖拽边界计算
     let mx = 0, my = 0
-    const cm = this.viewportOptions.clampMargin
+    const cm = this.viewportConfig.clampMargin
 
     if (typeof cm === 'string' && cm.endsWith('%')) {
       const ratio = parseFloat(cm) / 100
@@ -147,7 +142,7 @@ export class LeaferEngine {
   }
 
   /**
-   * 将主层的变换强制同步给从层，并应用边界约束。
+   * 同步变换
    */
   private syncAndClamp() {
     this.clampToViewport()
@@ -158,14 +153,14 @@ export class LeaferEngine {
   }
 
   /**
-   * 通知外部（如 React 组件）视野摄像机变换状态发生变更。
+   * 通知变更
    */
   private notifyCameraChange() {
     this.onCameraChange?.(this.getCameraState())
   }
 
   /**
-   * 开始监控父容器 DIV 物理长宽规格的调节
+   * 监控尺寸
    */
   private bindResizeObserver(view: HTMLDivElement) {
     if (typeof ResizeObserver === "undefined") return
@@ -174,37 +169,37 @@ export class LeaferEngine {
   }
 
   /**
-   * 动态重载网格规格 (例如用户修改地图宽高或单元尺寸时调用)。
+   * 重新配置网格
    */
-  public setupGrid(options: GridOptions) {
-    this.gridOptions = resolveGridOptions(options)
-    this.gridRenderer.render(this.gridOptions)
+  public setupGrid(config: GridConfig) {
+    this.gridConfig = config
+    this.gridRenderer.render(this.gridConfig)
     this.fitToViewport()
   }
 
   /**
-   * 视口自适应居中算法。
+   * 居中自适应
    */
   public fitToViewport() {
     const { width: vw, height: vh } = this.getViewportSize()
-    const p = this.viewportOptions.padding
+    const p = this.viewportConfig.padding
 
     const availableWidth = Math.max(vw - p.left - p.right, 1)
     const availableHeight = Math.max(vh - p.top - p.bottom, 1)
 
     // 算出双向适应比，取极小值使得不越界
     let scale = Math.min(
-      availableWidth / this.gridOptions.width,
-      availableHeight / this.gridOptions.height
+      availableWidth / this.width,
+      availableHeight / this.height
     )
     scale = Math.min(
-      Math.max(scale, this.viewportOptions.zoomMin),
-      this.viewportOptions.zoomMax
+      Math.max(scale, this.viewportConfig.zoomMin),
+      this.viewportConfig.zoomMax
     )
 
     // 计算世界原点的偏移
-    const x = p.left + (availableWidth - this.gridOptions.width * scale) / 2
-    const y = p.top + (availableHeight - this.gridOptions.height * scale) / 2
+    const x = p.left + (availableWidth - this.width * scale) / 2
+    const y = p.top + (availableHeight - this.height * scale) / 2
 
     this.app.tree.zoomLayer.set({ x, y, scaleX: scale, scaleY: scale })
     this.syncAndClamp()
@@ -212,17 +207,21 @@ export class LeaferEngine {
   }
 
   /**
-   * 获取当前引擎挂载的网格配置参数
+   * 获取当前引擎挂载的网格配置参数（带计算属性指标）
    */
-  public getGrid(): Grid {
-    return this.gridOptions
+  public getGrid(): GridMetrics {
+    return {
+      ...this.gridConfig,
+      width: this.width,
+      height: this.height,
+    }
   }
 
   /**
    * 辅助方法：快捷提取当前网格每一格单位的物理尺寸大小
    */
   public getCellSize() {
-    return this.gridOptions.cellSize
+    return this.gridConfig.cellSize
   }
 
   /**
@@ -252,7 +251,7 @@ export class LeaferEngine {
   }
 
   /**
-   * 局部容器坐标系 (基于 React Div) 转换为底层画布的世界坐标系。
+   * 坐标转换：屏幕 -> 世界
    */
   public screenToWorld(x: number, y: number): WorldPoint {
     const { x: cx, y: cy, scale } = this.getCameraState()
@@ -263,26 +262,26 @@ export class LeaferEngine {
   }
 
   /**
-   * 检测所给的世界坐标位置是否还存在于有效的安全网格系统定义区域内
+   * 检测是否在世界内
    */
   public isInsideWorld(x: number, y: number) {
     return (
       x >= 0 &&
       y >= 0 &&
-      x < this.gridOptions.width &&
-      y < this.gridOptions.height
+      x < this.width &&
+      y < this.height
     )
   }
 
   /**
-   * 将无规律的浮点世界坐标规范划入它从属的最近的一块整数网格块 (格子索引)
+   * 坐标转换：世界 -> 格子
    */
   public worldToCell(x: number, y: number): GridCell {
-    return worldToCell(x, y, this.gridOptions.cellSize)
+    return worldToCell(x, y, this.gridConfig.cellSize)
   }
 
   /**
-   * 直接从外部提供的屏幕空间映射找到用户鼠标底下究竟悬停着哪一块物理网格块。
+   * 坐标转换：屏幕 -> 格子
    */
   public screenToCell(x: number, y: number): GridCell | null {
     const world = this.screenToWorld(x, y)
@@ -291,10 +290,10 @@ export class LeaferEngine {
   }
 
   /**
-   * 通过给定的 X / Y 网格整数下标索引解算出对应的世界级偏移量坐标
+   * 坐标转换：格子 -> 世界
    */
   public cellToWorld(cellX: number, cellY: number): WorldPoint {
-    return cellToWorld(cellX, cellY, this.gridOptions.cellSize)
+    return cellToWorld(cellX, cellY, this.gridConfig.cellSize)
   }
 
   /**
@@ -311,7 +310,7 @@ export class LeaferEngine {
 /**
  * 快捷创建并初始化 LeaferEngine 渲染引擎类工厂工具函数。
  */
-export function createLeaferEngine(options: CreateLeaferEngineOptions) {
-  return new LeaferEngine(options)
+export function createLeaferEngine(config: LeaferEngineConfig) {
+  return new LeaferEngine(config)
 }
 

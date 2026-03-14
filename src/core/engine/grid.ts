@@ -1,40 +1,22 @@
 import { Rect } from "leafer-ui"
 import type { ILeafer } from "leafer-ui"
 import type {
-  Grid,
+  GridConfig,
   GridCell,
-  GridOptions,
   WorldPoint,
-} from "../types"
-
-function requirePositiveInteger(name: string, value: number) {
-  if (!Number.isFinite(value) || value <= 0 || !Number.isInteger(value)) {
-    throw new Error(`${name} 必须是正整数`)
-  }
-
-  return value
-}
+} from "./types"
 
 /**
- * 校验并计算网格配置，得到包含 width/height 的完整 Grid 对象。
+ * 将网格坐标转换为唯一字符串标识符，常用于 Map 索引。
  */
-export function resolveGridOptions(options: GridOptions): Grid {
-  const cellSize = requirePositiveInteger("cellSize", options.cellSize)
-  const cols = requirePositiveInteger("cols", options.cols)
-  const rows = requirePositiveInteger("rows", options.rows)
-
-  return {
-    ...options,
-    width: cols * cellSize,
-    height: rows * cellSize,
-    majorLineEvery: requirePositiveInteger("majorLineEvery", options.majorLineEvery),
-  }
-}
-
 export function keyByCell(cellX: number, cellY: number) {
   return `${cellX},${cellY}`
 }
 
+/**
+ * 世界坐标 (连续值) 转换为网格坐标 (离散单元索引)。
+ * 使用 Math.floor 确保负数坐标也能正确映射到网格空间。
+ */
 export function worldToCell(x: number, y: number, cellSize: number): GridCell {
   return {
     cellX: Math.floor(x / cellSize),
@@ -42,6 +24,9 @@ export function worldToCell(x: number, y: number, cellSize: number): GridCell {
   }
 }
 
+/**
+ * 网格坐标转换为该单元格左上角的世界坐标。
+ */
 export function cellToWorld(
   cellX: number,
   cellY: number,
@@ -53,6 +38,9 @@ export function cellToWorld(
   }
 }
 
+/**
+ * 将任意世界坐标“吸附”到最近的网格单元左上角。
+ */
 export function snapWorldPosition(
   x: number,
   y: number,
@@ -63,22 +51,32 @@ export function snapWorldPosition(
 }
 
 /**
- * 网格线渲染器：负责固定画布背景、网格线和边框的创建/销毁。
+ * GridRenderer - 网格背景与线条绘制器。
+ * 
+ * 主要职责：
+ * 1. 在指定的 ILeafer 图层上渲染实色背景。
+ * 2. 根据配置渲染次级网格线、主网格线 (Major Lines) 以及地图边界线 (Border)。
+ * 3. 维护网格节点的生命周期，支持清空重绘。
  */
 export class GridRenderer {
+  /** 挂载的图层容器 (通常是 Leafer App 的 ground 层) */
   private readonly parent: ILeafer
+  /** 维护当前所有渲染的 Rect 节点引用，用于清理 */
   private gridNodes: Rect[] = []
 
   constructor(parent: ILeafer) {
     this.parent = parent
   }
 
-  public render(options: Grid) {
+  /**
+   * 执行渲染逻辑：先清理旧节点，再根据 specifications 循环创建网格线
+   * 
+   * @param options 网格配置项
+   */
+  public render(options: GridConfig) {
     this.clear()
 
     const {
-      width,
-      height,
       cellSize,
       cols,
       rows,
@@ -92,6 +90,10 @@ export class GridRenderer {
       borderThickness,
     } = options
 
+    const width = cols * cellSize
+    const height = rows * cellSize
+
+    // 1. 绘制底色背景
     const background = new Rect({
       x: 0,
       y: 0,
@@ -103,6 +105,7 @@ export class GridRenderer {
     this.parent.add(background)
     this.gridNodes.push(background)
 
+    // 2. 绘制垂直网格线 (Columns)
     for (let column = 0; column <= cols; column += 1) {
       const isBorder = column === 0 || column === cols
       const isMajor = column % majorLineEvery === 0
@@ -116,7 +119,7 @@ export class GridRenderer {
       const x = column * cellSize
 
       this.appendLineRect({
-        x: x - thickness / 2,
+        x: x - thickness / 2, // 居中线条，防止视觉偏置
         y: 0,
         width: thickness,
         height,
@@ -124,6 +127,7 @@ export class GridRenderer {
       })
     }
 
+    // 3. 绘制水平网格线 (Rows)
     for (let row = 0; row <= rows; row += 1) {
       const isBorder = row === 0 || row === rows
       const isMajor = row % majorLineEvery === 0
@@ -146,11 +150,17 @@ export class GridRenderer {
     }
   }
 
+  /**
+   * 彻底清理并销毁所有已渲染的网格节点
+   */
   public clear() {
     this.gridNodes.forEach((node) => node.destroy())
     this.gridNodes = []
   }
 
+  /**
+   * 内部工厂：创建一个矩形并将其作为线段添加到容器中
+   */
   private appendLineRect(config: {
     x: number
     y: number
@@ -164,7 +174,7 @@ export class GridRenderer {
       width: config.width,
       height: config.height,
       fill: config.color,
-      hitChildren: false,
+      hitChildren: false, // 禁用交互，网格不应该响应鼠标
     })
 
     this.parent.add(line)
