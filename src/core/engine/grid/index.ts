@@ -1,4 +1,4 @@
-import { Rect, type App } from "leafer-ui"
+import { Group, Rect } from "leafer-ui"
 import type {
   GridCell,
   GridOptions,
@@ -6,54 +6,108 @@ import type {
   WorldPoint,
 } from "../types"
 
-/**
- * 网格系统默认参数：
- * - cellSize: 单格像素大小
- * - majorLineEvery: 每 N 条细线绘制一条主线
- * - halfCellCount: 以原点向四周扩展的半格数（超大有限网格）
- */
 export const DEFAULT_GRID_OPTIONS: ResolvedGridOptions = {
+  width: 4096,
+  height: 4096,
   cellSize: 32,
+  cols: 128,
+  rows: 128,
   majorLineEvery: 8,
-  halfCellCount: 500,
-  minorColor: "#2b3442",
-  majorColor: "#3b4758",
-  axisColor: "#59667a",
+  backgroundColor: "#0b1220",
+  minorColor: "#1e293b",
+  majorColor: "#334155",
+  borderColor: "#f59e0b",
   lineThickness: 1,
-  majorLineThickness: 1.2,
-  axisLineThickness: 1.6,
+  majorLineThickness: 1.4,
+  borderThickness: 2,
+}
+
+function requirePositiveInteger(name: string, value: number) {
+  if (!Number.isFinite(value) || value <= 0 || !Number.isInteger(value)) {
+    throw new Error(`${name} 必须是正整数`)
+  }
+
+  return value
 }
 
 /**
- * 合并网格配置：外部传入可选字段，内部得到完整配置。
+ * 合并并校验网格配置，得到统一的有限画布尺寸。
  */
 export function resolveGridOptions(options?: GridOptions): ResolvedGridOptions {
+  const cellSize = requirePositiveInteger(
+    "cellSize",
+    options?.cellSize ?? DEFAULT_GRID_OPTIONS.cellSize
+  )
+
+  const colsFromOptions =
+    options?.cols !== undefined
+      ? requirePositiveInteger("cols", options.cols)
+      : undefined
+  const rowsFromOptions =
+    options?.rows !== undefined
+      ? requirePositiveInteger("rows", options.rows)
+      : undefined
+
+  const widthFromCells =
+    colsFromOptions !== undefined ? colsFromOptions * cellSize : undefined
+  const heightFromCells =
+    rowsFromOptions !== undefined ? rowsFromOptions * cellSize : undefined
+
+  const width = requirePositiveInteger(
+    "width",
+    options?.width ?? widthFromCells ?? DEFAULT_GRID_OPTIONS.width
+  )
+  const height = requirePositiveInteger(
+    "height",
+    options?.height ?? heightFromCells ?? DEFAULT_GRID_OPTIONS.height
+  )
+
+  if (width % cellSize !== 0) {
+    throw new Error("width 必须是 cellSize 的整数倍")
+  }
+
+  if (height % cellSize !== 0) {
+    throw new Error("height 必须是 cellSize 的整数倍")
+  }
+
+  const cols = colsFromOptions ?? width / cellSize
+  const rows = rowsFromOptions ?? height / cellSize
+
+  if (width !== cols * cellSize) {
+    throw new Error("width 与 cols * cellSize 不一致")
+  }
+
+  if (height !== rows * cellSize) {
+    throw new Error("height 与 rows * cellSize 不一致")
+  }
+
   return {
-    cellSize: options?.cellSize ?? DEFAULT_GRID_OPTIONS.cellSize,
-    majorLineEvery:
-      options?.majorLineEvery ?? DEFAULT_GRID_OPTIONS.majorLineEvery,
-    halfCellCount: options?.halfCellCount ?? DEFAULT_GRID_OPTIONS.halfCellCount,
+    width,
+    height,
+    cellSize,
+    cols,
+    rows,
+    majorLineEvery: requirePositiveInteger(
+      "majorLineEvery",
+      options?.majorLineEvery ?? DEFAULT_GRID_OPTIONS.majorLineEvery
+    ),
+    backgroundColor:
+      options?.backgroundColor ?? DEFAULT_GRID_OPTIONS.backgroundColor,
     minorColor: options?.minorColor ?? DEFAULT_GRID_OPTIONS.minorColor,
     majorColor: options?.majorColor ?? DEFAULT_GRID_OPTIONS.majorColor,
-    axisColor: options?.axisColor ?? DEFAULT_GRID_OPTIONS.axisColor,
+    borderColor: options?.borderColor ?? DEFAULT_GRID_OPTIONS.borderColor,
     lineThickness: options?.lineThickness ?? DEFAULT_GRID_OPTIONS.lineThickness,
     majorLineThickness:
       options?.majorLineThickness ?? DEFAULT_GRID_OPTIONS.majorLineThickness,
-    axisLineThickness:
-      options?.axisLineThickness ?? DEFAULT_GRID_OPTIONS.axisLineThickness,
+    borderThickness:
+      options?.borderThickness ?? DEFAULT_GRID_OPTIONS.borderThickness,
   }
 }
 
-/**
- * 网格坐标 key（用于 Map/Record 索引）。
- */
 export function keyByCell(cellX: number, cellY: number) {
   return `${cellX},${cellY}`
 }
 
-/**
- * 世界坐标 -> 网格坐标（向下取整）。
- */
 export function worldToCell(x: number, y: number, cellSize: number): GridCell {
   return {
     cellX: Math.floor(x / cellSize),
@@ -61,9 +115,6 @@ export function worldToCell(x: number, y: number, cellSize: number): GridCell {
   }
 }
 
-/**
- * 网格坐标 -> 世界坐标（单元左上角）。
- */
 export function cellToWorld(
   cellX: number,
   cellY: number,
@@ -75,9 +126,6 @@ export function cellToWorld(
   }
 }
 
-/**
- * 将世界坐标吸附到网格单元左上角。
- */
 export function snapWorldPosition(
   x: number,
   y: number,
@@ -88,71 +136,95 @@ export function snapWorldPosition(
 }
 
 /**
- * 网格线渲染器：只负责网格线节点创建/销毁。
+ * 网格线渲染器：负责固定画布背景、网格线和边框的创建/销毁。
  */
 export class GridRenderer {
-  private app: App
+  private readonly parent: Group
   private gridNodes: Rect[] = []
 
-  constructor(app: App) {
-    this.app = app
+  constructor(parent: Group) {
+    this.parent = parent
   }
 
-  /**
-   * 按配置重建网格（超大有限网格策略）。
-   */
   public render(options: ResolvedGridOptions) {
     this.clear()
 
     const {
+      width,
+      height,
       cellSize,
+      cols,
+      rows,
       majorLineEvery,
-      halfCellCount,
+      backgroundColor,
       minorColor,
       majorColor,
-      axisColor,
+      borderColor,
       lineThickness,
       majorLineThickness,
-      axisLineThickness,
+      borderThickness,
     } = options
 
-    const min = -halfCellCount * cellSize
-    const span = halfCellCount * 2 * cellSize
+    const background = new Rect({
+      x: 0,
+      y: 0,
+      width,
+      height,
+      fill: backgroundColor,
+      hitChildren: false,
+    })
+    this.parent.add(background)
+    this.gridNodes.push(background)
 
-    for (let i = -halfCellCount; i <= halfCellCount; i += 1) {
-      const position = i * cellSize
-      const isAxis = i === 0
-      const isMajor = i % majorLineEvery === 0
+    const shouldRenderMinorLines = cols <= 1024 && rows <= 1024
 
-      const thickness = isAxis
-        ? axisLineThickness
+    for (let column = 0; column <= cols; column += 1) {
+      const isBorder = column === 0 || column === cols
+      const isMajor = column % majorLineEvery === 0
+
+      if (!isBorder && !isMajor && !shouldRenderMinorLines) continue
+
+      const thickness = isBorder
+        ? borderThickness
         : isMajor
           ? majorLineThickness
           : lineThickness
-
-      const color = isAxis ? axisColor : isMajor ? majorColor : minorColor
+      const color = isBorder ? borderColor : isMajor ? majorColor : minorColor
+      const x = column * cellSize
 
       this.appendLineRect({
-        x: position - thickness / 2,
-        y: min,
+        x: x - thickness / 2,
+        y: 0,
         width: thickness,
-        height: span,
+        height,
         color,
       })
+    }
+
+    for (let row = 0; row <= rows; row += 1) {
+      const isBorder = row === 0 || row === rows
+      const isMajor = row % majorLineEvery === 0
+
+      if (!isBorder && !isMajor && !shouldRenderMinorLines) continue
+
+      const thickness = isBorder
+        ? borderThickness
+        : isMajor
+          ? majorLineThickness
+          : lineThickness
+      const color = isBorder ? borderColor : isMajor ? majorColor : minorColor
+      const y = row * cellSize
 
       this.appendLineRect({
-        x: min,
-        y: position - thickness / 2,
-        width: span,
+        x: 0,
+        y: y - thickness / 2,
+        width,
         height: thickness,
         color,
       })
     }
   }
 
-  /**
-   * 清理网格线节点。
-   */
   public clear() {
     this.gridNodes.forEach((node) => node.destroy())
     this.gridNodes = []
@@ -171,9 +243,10 @@ export class GridRenderer {
       width: config.width,
       height: config.height,
       fill: config.color,
+      hitChildren: false,
     })
 
-    this.app.ground.add(line)
+    this.parent.add(line)
     this.gridNodes.push(line)
   }
 }

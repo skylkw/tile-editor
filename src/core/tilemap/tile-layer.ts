@@ -1,80 +1,155 @@
 import type { LeaferEngine } from "@/core/engine/leafer-engine"
+import type { MapMetrics } from "@/core/engine/types"
 import { readTileLayerCells } from "@/core/io/tiled-map"
-import { Rect } from "leafer-ui"
-import { ChunkedTileGrid } from "./chunked-grid"
+import { Group, Image, Rect } from "leafer-ui"
 import { decodeTiledGid, encodeTiledGid } from "./tiled-gid"
 import type { TiledTileLayer } from "./tiled-types"
+import type { Tileset } from "./tileset"
 
-function keyByCell(cellX: number, cellY: number) {
-  return `${cellX},${cellY}`
+type TileNode = Image | Rect
+
+export interface TileLayerOptions {
+  id?: string
+  name?: string
+  visible?: boolean
+  order?: number
 }
 
 /**
- * Tile 图块层（业务层）：
- * - 不属于底层引擎职责
- * - 依赖引擎提供的坐标/画布能力完成图块增删改
+ * 有限尺寸 tile 图层：
+ * - 使用定长数组保存地图数据
+ * - 将非空格子渲染为节点，支持切换引擎后保留数据
  */
 export class TileLayer {
+  private readonly id: string
   private engine: LeaferEngine
-  private tiles: Record<string, Rect> = {}
-  private readonly tileData = new ChunkedTileGrid(16, 16)
+  private tilesets: Tileset[] = []
+  private layerGroup: Group
+  private metrics: MapMetrics
+  private tileData: Uint32Array
+  private name: string
+  private visible: boolean
+  private order: number
+  private readonly tiles = new Map<number, TileNode>()
 
-  constructor(engine: LeaferEngine) {
+  constructor(engine: LeaferEngine, options: TileLayerOptions = {}) {
+    this.id = options.id ?? `layer-${Date.now()}`
     this.engine = engine
+    this.metrics = engine.getMapMetrics()
+    this.tileData = new Uint32Array(this.metrics.cols * this.metrics.rows)
+    this.name = options.name ?? "Tile Layer"
+    this.visible = options.visible ?? true
+    this.order = options.order ?? 0
+    this.layerGroup = new Group({ visible: this.visible, zIndex: this.order })
+    this.engine.getContentLayer().add(this.layerGroup)
   }
 
-  /**
-   * 在指定格子放置或覆盖一个 tile。
-   */
-  public setTile(cellX: number, cellY: number, fill = "#4f46e5") {
-    this.setTileGid(cellX, cellY, 1, fill)
+  public getId() {
+    return this.id
   }
 
-  /**
-   * 在指定格子放置或覆盖一个 tile（Tiled raw GID）。
-   */
-  public setTileGid(
-    cellX: number,
-    cellY: number,
-    rawGid: number,
-    fill = "#4f46e5"
-  ) {
+  public getName() {
+    return this.name
+  }
+
+  public setName(name: string) {
+    this.name = name.trim() || "Tile Layer"
+  }
+
+  public isVisible() {
+    return this.visible
+  }
+
+  public getOrder() {
+    return this.order
+  }
+
+  public setVisible(visible: boolean) {
+    this.visible = visible
+    this.layerGroup.set({ visible })
+  }
+
+  public setOrder(order: number) {
+    this.order = order
+    this.layerGroup.set({ zIndex: order })
+  }
+
+  public isAttachedTo(engine: LeaferEngine) {
+    return this.engine === engine
+  }
+
+  public attachEngine(engine: LeaferEngine) {
+    this.engine = engine
+    this.layerGroup = new Group({
+      visible: this.visible,
+      zIndex: this.order,
+    })
+    this.engine.getContentLayer().add(this.layerGroup)
+    this.resizeToMatchEngine()
+    this.refresh()
+  }
+
+  public resizeToMatchEngine() {
+    const nextMetrics = this.engine.getMapMetrics()
+
+    if (
+      this.metrics.cols === nextMetrics.cols &&
+      this.metrics.rows === nextMetrics.rows &&
+      this.metrics.cellSize === nextMetrics.cellSize &&
+      this.metrics.width === nextMetrics.width &&
+      this.metrics.height === nextMetrics.height
+    ) {
+      return
+    }
+
+    const nextData = new Uint32Array(nextMetrics.cols * nextMetrics.rows)
+    const copyCols = Math.min(this.metrics.cols, nextMetrics.cols)
+    const copyRows = Math.min(this.metrics.rows, nextMetrics.rows)
+
+    for (let row = 0; row < copyRows; row += 1) {
+      const prevStart = row * this.metrics.cols
+      const nextStart = row * nextMetrics.cols
+      const slice = this.tileData.subarray(prevStart, prevStart + copyCols)
+      nextData.set(slice, nextStart)
+    }
+
+    this.metrics = nextMetrics
+    this.tileData = nextData
+    this.clearNodesOnly()
+    this.refresh()
+  }
+
+  public setTileset(tileset: Tileset | null) {
+    this.setTilesets(tileset ? [tileset] : [])
+  }
+
+  public setTilesets(tilesets: Tileset[]) {
+    this.tilesets = tilesets
+    this.refresh()
+  }
+
+  public setTile(cellX: number, cellY: number, gid: number) {
+    this.setTileGid(cellX, cellY, gid)
+  }
+
+  public setTileGid(cellX: number, cellY: number, rawGid: number) {
+    if (!this.isInside(cellX, cellY)) return
+
     if (rawGid === 0) {
       this.removeTile(cellX, cellY)
       return
     }
 
-    this.tileData.set(cellX, cellY, rawGid)
-
-    const key = keyByCell(cellX, cellY)
-    const existed = this.tiles[key]
-    if (existed) existed.destroy()
-
-    const world = this.engine.cellToWorld(cellX, cellY)
-    const size = this.engine.getCellSize()
-
-    const tileRect = new Rect({
-      x: world.x,
-      y: world.y,
-      width: size,
-      height: size,
-      fill,
-    })
-
-    this.tiles[key] = tileRect
-    this.engine.getApp().tree.add(tileRect)
+    const index = this.getIndex(cellX, cellY)
+    this.tileData[index] = rawGid
+    this.renderTileAt(index, rawGid)
   }
 
-  /**
-   * 获取指定格子的 raw GID（0 表示空）。
-   */
   public getTileGid(cellX: number, cellY: number) {
-    return this.tileData.get(cellX, cellY)
+    if (!this.isInside(cellX, cellY)) return 0
+    return this.tileData[this.getIndex(cellX, cellY)]
   }
 
-  /**
-   * 更新指定格子的翻转位并保持原有 gid。
-   */
   public setTileFlipFlags(
     cellX: number,
     cellY: number,
@@ -85,7 +160,7 @@ export class TileLayer {
       rotateHex120?: boolean
     }
   ) {
-    const raw = this.tileData.get(cellX, cellY)
+    const raw = this.getTileGid(cellX, cellY)
     if (raw === 0) return
 
     const decoded = decodeTiledGid(raw)
@@ -96,23 +171,41 @@ export class TileLayer {
       rotateHex120: flags.rotateHex120 ?? decoded.rotateHex120,
     })
 
-    this.tileData.set(cellX, cellY, nextRaw)
+    this.setTileGid(cellX, cellY, nextRaw)
   }
 
-  /**
-   * 从 Tiled tilelayer 导入图块（支持 chunks 与 data）。
-   */
+  public removeTile(cellX: number, cellY: number) {
+    if (!this.isInside(cellX, cellY)) return
+
+    const index = this.getIndex(cellX, cellY)
+    this.tileData[index] = 0
+
+    const node = this.tiles.get(index)
+    if (!node) return
+
+    node.destroy()
+    this.tiles.delete(index)
+  }
+
+  public refresh() {
+    this.clearNodesOnly()
+
+    for (let index = 0; index < this.tileData.length; index += 1) {
+      const rawGid = this.tileData[index]
+      if (!rawGid) continue
+      this.renderTileAt(index, rawGid)
+    }
+  }
+
   public importTiledTileLayer(
     layer: TiledTileLayer,
     options?: {
       mapWidth?: number
       mapHeight?: number
-      fillResolver?: (rawGid: number) => string
     }
   ) {
     this.clear()
 
-    const fillResolver = options?.fillResolver ?? this.defaultFillResolver
     const cells = readTileLayerCells(
       layer,
       options?.mapWidth,
@@ -120,63 +213,107 @@ export class TileLayer {
     )
 
     for (const cell of cells) {
-      this.setTileGid(
-        cell.cellX,
-        cell.cellY,
-        cell.rawGid,
-        fillResolver(cell.rawGid)
-      )
+      this.setTileGid(cell.cellX, cell.cellY, cell.rawGid)
     }
   }
 
-  /**
-   * 删除指定格子中的 tile。
-   */
-  public removeTile(cellX: number, cellY: number) {
-    this.tileData.set(cellX, cellY, 0)
-
-    const key = keyByCell(cellX, cellY)
-    const node = this.tiles[key]
-    if (!node) return
-
-    node.destroy()
-    delete this.tiles[key]
-  }
-
-  /**
-   * 清空所有 tile。
-   */
   public clear() {
-    Object.values(this.tiles).forEach((node) => node.destroy())
-    this.tiles = {}
-    this.tileData.clear()
+    this.tileData.fill(0)
+    this.clearNodesOnly()
   }
 
-  /**
-   * 导出为 Tiled tilelayer 的 chunk 结构（适配 infinite map）。
-   */
   public exportTiledTileLayer(name = "Tile Layer 1"): TiledTileLayer {
     return {
-      name,
+      name: name || this.name,
       type: "tilelayer",
-      visible: true,
+      visible: this.visible,
       opacity: 1,
+      width: this.metrics.cols,
+      height: this.metrics.rows,
       x: 0,
       y: 0,
-      chunks: this.tileData.exportChunks(),
+      data: Array.from(this.tileData),
     }
   }
 
-  private defaultFillResolver(rawGid: number) {
-    const decoded = decodeTiledGid(rawGid)
-    const hue = (decoded.gid * 37) % 360
-    return `hsl(${hue}, 68%, 56%)`
-  }
-
-  /**
-   * 释放资源。
-   */
   public destroy() {
     this.clear()
+    this.layerGroup.destroy()
+  }
+
+  private renderTileAt(index: number, rawGid: number) {
+    const existed = this.tiles.get(index)
+    if (existed) {
+      existed.destroy()
+      this.tiles.delete(index)
+    }
+
+    const cellX = index % this.metrics.cols
+    const cellY = Math.floor(index / this.metrics.cols)
+    const world = this.engine.cellToWorld(cellX, cellY)
+    const size = this.engine.getCellSize()
+    const decoded = decodeTiledGid(rawGid)
+
+    const tileImageUrl = this.getTilesetForGid(decoded.gid)?.getTileImageUrl(
+      decoded.gid
+    )
+    const node: TileNode = tileImageUrl
+      ? new Image({
+          x: world.x,
+          y: world.y,
+          width: size,
+          height: size,
+          url: tileImageUrl,
+        })
+      : this.createFallbackRect(world.x, world.y, size, decoded.gid)
+
+    if (decoded.flipH || decoded.flipV) {
+      node.set({
+        x: world.x + (decoded.flipH ? size : 0),
+        y: world.y + (decoded.flipV ? size : 0),
+        scaleX: decoded.flipH ? -1 : 1,
+        scaleY: decoded.flipV ? -1 : 1,
+      })
+    }
+
+    this.tiles.set(index, node)
+    this.layerGroup.add(node)
+  }
+
+  private createFallbackRect(x: number, y: number, size: number, gid: number) {
+    const hue = (gid * 41) % 360
+
+    return new Rect({
+      x,
+      y,
+      width: size,
+      height: size,
+      fill: `hsl(${hue}, 78%, 58%)`,
+      stroke: "#0f172a",
+      strokeWidth: 1,
+      opacity: 0.92,
+    })
+  }
+
+  private clearNodesOnly() {
+    this.tiles.forEach((node) => node.destroy())
+    this.tiles.clear()
+  }
+
+  private getTilesetForGid(gid: number) {
+    return this.tilesets.find((tileset) => tileset.containsGid(gid)) ?? null
+  }
+
+  private isInside(cellX: number, cellY: number) {
+    return (
+      cellX >= 0 &&
+      cellY >= 0 &&
+      cellX < this.metrics.cols &&
+      cellY < this.metrics.rows
+    )
+  }
+
+  private getIndex(cellX: number, cellY: number) {
+    return cellY * this.metrics.cols + cellX
   }
 }

@@ -28,7 +28,7 @@ export function buildTiledMap(options: TiledMapBuildOptions): TiledMap {
     tiledversion: "1.10",
     orientation: options.orientation ?? "orthogonal",
     renderorder: "right-down",
-    infinite: options.infinite ?? true,
+    infinite: options.infinite ?? false,
     width: options.width,
     height: options.height,
     tilewidth: options.tilewidth,
@@ -164,6 +164,11 @@ function parseBase64Data(data: string, compression?: string): number[] {
   return values
 }
 
-function isTileLayer(layer: Record<string, unknown>): layer is TiledTileLayer {
-  return layer.type === "tilelayer"
+function isTileLayer(layer: TiledMap["layers"][number]): layer is TiledTileLayer {
+  return (
+    typeof layer === "object" &&
+    layer !== null &&
+    "type" in layer &&
+    layer.type === "tilelayer"
+  )
 }

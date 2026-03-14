@@ -8,10 +8,12 @@ import type {
 } from "@/core/tilemap/tiled-types"
 import { useCallback, useEffect, useRef, type RefObject } from "react"
 
+import type { Tileset } from "@/core/tilemap/tileset"
+
 /**
  * React 适配层：
- * - 将 TileLayer（业务层）挂接到 React 生命周期
- * - 对外暴露稳定的 set/remove/clear 接口
+ * - 复用单个 TileLayer 实例，并在引擎重建时自动重新挂接
+ * - 对外暴露稳定的 tile 操作与 Tiled 导入导出接口
  */
 export function useTileLayer(engineRef: RefObject<LeaferEngine | null>) {
   const layerRef = useRef<TileLayer | null>(null)
@@ -22,15 +24,31 @@ export function useTileLayer(engineRef: RefObject<LeaferEngine | null>) {
 
     if (!layerRef.current) {
       layerRef.current = new TileLayer(engine)
+      return layerRef.current
     }
+
+    if (!layerRef.current.isAttachedTo(engine)) {
+      layerRef.current.attachEngine(engine)
+    }
+
+    layerRef.current.resizeToMatchEngine()
     return layerRef.current
   }, [engineRef])
 
-  const setTile = useCallback(
-    (cellX: number, cellY: number, fill = "#4f46e5") => {
+  const setTileset = useCallback(
+    (tileset: Tileset | null) => {
       const layer = getLayer()
       if (!layer) return
-      layer.setTile(cellX, cellY, fill)
+      layer.setTileset(tileset)
+    },
+    [getLayer]
+  )
+
+  const setTile = useCallback(
+    (cellX: number, cellY: number, gid: number) => {
+      const layer = getLayer()
+      if (!layer) return
+      layer.setTile(cellX, cellY, gid)
     },
     [getLayer]
   )
@@ -45,10 +63,10 @@ export function useTileLayer(engineRef: RefObject<LeaferEngine | null>) {
   )
 
   const setTileGid = useCallback(
-    (cellX: number, cellY: number, rawGid: number, fill = "#4f46e5") => {
+    (cellX: number, cellY: number, rawGid: number) => {
       const layer = getLayer()
       if (!layer) return
-      layer.setTileGid(cellX, cellY, rawGid, fill)
+      layer.setTileGid(cellX, cellY, rawGid)
     },
     [getLayer]
   )
@@ -73,8 +91,6 @@ export function useTileLayer(engineRef: RefObject<LeaferEngine | null>) {
 
   const exportTiledMap = useCallback(
     (options?: {
-      width?: number
-      height?: number
       layerName?: string
       tilesets?: TiledTilesetRef[]
       infinite?: boolean
@@ -85,14 +101,14 @@ export function useTileLayer(engineRef: RefObject<LeaferEngine | null>) {
       if (!layer || !engine) return null
 
       const tileLayer = layer.exportTiledTileLayer(options?.layerName)
-      const cellSize = engine.getCellSize()
+      const metrics = engine.getMapMetrics()
 
       return buildTiledMap({
-        tilewidth: cellSize,
-        tileheight: cellSize,
-        infinite: options?.infinite ?? true,
-        width: options?.width,
-        height: options?.height,
+        tilewidth: metrics.cellSize,
+        tileheight: metrics.cellSize,
+        infinite: options?.infinite ?? false,
+        width: metrics.cols,
+        height: metrics.rows,
         orientation: options?.orientation ?? "orthogonal",
         tilesets: options?.tilesets ?? [],
         layers: [tileLayer],
@@ -121,8 +137,8 @@ export function useTileLayer(engineRef: RefObject<LeaferEngine | null>) {
   )
 
   const clearTiles = useCallback(() => {
-    layerRef.current?.clear()
-  }, [])
+    getLayer()?.clear()
+  }, [getLayer])
 
   useEffect(() => {
     return () => {
@@ -132,6 +148,7 @@ export function useTileLayer(engineRef: RefObject<LeaferEngine | null>) {
   }, [])
 
   return {
+    setTileset,
     setTile,
     setTileGid,
     getTileGid,
