@@ -1,5 +1,5 @@
-import { App, Group } from "leafer-ui"
-import { CameraController } from "./camera-controller"
+import { App, MoveEvent, ZoomEvent } from "leafer-ui"
+import "@leafer-in/viewport"
 import {
   GridRenderer,
   cellToWorld,
@@ -17,7 +17,6 @@ import type {
   WorldPoint,
 } from "./types"
 
-
 const DEFAULT_VIEWPORT_OPTIONS: Required<ViewportOptions> = {
   zoomMin: 0.1,
   zoomMax: 16,
@@ -27,8 +26,8 @@ const DEFAULT_VIEWPORT_OPTIONS: Required<ViewportOptions> = {
 
 /**
  * Leafer 引擎封装：
- * - 管理有限尺寸画布与网格渲染
- * - 用统一 camera 控制缩放/平移
+ * - 去除了多余的 Group 层级，直接使用 App 内置的 ground/tree/sky 层
+ * - 使用 Leafer 默认支持的 custom 视口类型，支持自动同步平移缩放
  * - 提供屏幕 / 世界 / 网格坐标换算
  */
 export class LeaferEngine {
@@ -36,14 +35,10 @@ export class LeaferEngine {
   private readonly gridRenderer: GridRenderer
   private gridOptions: Grid
   private readonly viewportOptions: Required<ViewportOptions>
-  private readonly cameraController: CameraController
-  private readonly groundWorldLayer: Group
-  private readonly treeWorldLayer: Group
-  private readonly skyWorldLayer: Group
-  private readonly gridLayer: Group
-  private readonly contentLayer: Group
-  private readonly overlayLayer: Group
   private resizeObserver: ResizeObserver | null = null
+
+  // 暴露给外界感知视口变化的回调，方便 React 层面重新渲染
+  public onCameraChange?: (state: CameraState) => void
 
   constructor(options: CreateLeaferEngineOptions) {
     this.gridOptions = resolveGridOptions(options.grid)
@@ -58,92 +53,127 @@ export class LeaferEngine {
     this.app = new App({
       view: options.view,
       fill: "#06101d",
-      ground: {},
-      tree: {},
-      sky: {},
+      ground: { type: 'design', hittable: false }, 
+      tree: { type: 'custom' }, 
+      sky: { type: 'design', hittable: false },
+      wheel: { preventDefault: true },
+      touch: { preventDefault: true },
+      pointer: { preventDefaultMenu: true },
     })
 
-    this.cameraController = new CameraController(
-      this.viewportOptions,
-      this.gridOptions
-    )
-    this.groundWorldLayer = new Group({ hitChildren: false })
-    this.treeWorldLayer = new Group()
-    this.skyWorldLayer = new Group({ hitChildren: false })
-    this.gridLayer = new Group({ hitChildren: false })
-    this.contentLayer = new Group()
-    this.overlayLayer = new Group({ hitChildren: false })
+    // 设置视图缩放范围
+    this.app.tree.config.zoom = {
+      min: this.viewportOptions.zoomMin,
+      max: this.viewportOptions.zoomMax,
+    }
 
-    this.groundWorldLayer.add(this.gridLayer)
-    this.treeWorldLayer.add(this.contentLayer)
-    this.skyWorldLayer.add(this.overlayLayer)
-    this.app.ground.add(this.groundWorldLayer)
-    this.app.tree.add(this.treeWorldLayer)
-    this.app.sky.add(this.skyWorldLayer)
+    const syncSlaveLayers = () => {
+      const { x, y, scaleX, scaleY } = this.app.tree.zoomLayer
+      const zoomStyle = { x, y, scaleX, scaleY }
+      this.app.ground.zoomLayer.set(zoomStyle)
+      this.app.sky.zoomLayer.set(zoomStyle)
+    }
 
-    this.gridRenderer = new GridRenderer(this.gridLayer)
+    // 自定义平移视图逻辑（并同步到三层）
+    this.app.tree.on(MoveEvent.BEFORE_MOVE, (e: MoveEvent) => {
+      const { x, y } = this.app.tree.getValidMove(e.moveX, e.moveY)
+      this.app.tree.zoomLayer.move(x, y)
+      syncSlaveLayers()
+    })
+
+    // 同步到外部（可选）
+    this.app.tree.on(MoveEvent.MOVE, () => {
+      this.notifyCameraChange()
+    })
+
+    // 自定义缩放视图逻辑（并同步到三层）
+    this.app.tree.on(ZoomEvent.BEFORE_ZOOM, (e: ZoomEvent) => {
+      const scale = this.app.tree.getValidScale(e.scale)
+      this.app.tree.zoomLayer.scaleOfWorld(e, scale)
+      syncSlaveLayers()
+    })
+
+    this.app.tree.on(ZoomEvent.ZOOM, () => {
+      this.notifyCameraChange()
+    })
+
+    this.gridRenderer = new GridRenderer(this.app.ground as any)
     this.gridRenderer.render(this.gridOptions)
 
-    this.syncViewportSize(options.view)
     this.fitToViewport()
     this.bindResizeObserver(options.view)
+  }
+
+  private notifyCameraChange() {
+    if (this.onCameraChange) {
+      this.onCameraChange(this.getCameraState())
+    }
   }
 
   private bindResizeObserver(view: HTMLDivElement) {
     if (typeof ResizeObserver === "undefined") return
 
     this.resizeObserver = new ResizeObserver(() => {
-      this.syncViewportSize(view)
-      this.cameraController.clampToBounds()
-      this.applyCamera()
+      this.fitToViewport()
     })
 
     this.resizeObserver.observe(view)
   }
 
-  private syncViewportSize(view: HTMLDivElement) {
-    this.cameraController.setViewportSize(view.clientWidth, view.clientHeight)
-  }
-
-  private applyCamera() {
-    const camera = this.cameraController.getState()
-    const cameraStyle = {
-      x: camera.x,
-      y: camera.y,
-      scaleX: camera.scale,
-      scaleY: camera.scale,
-    }
-
-    this.groundWorldLayer.set(cameraStyle)
-    this.treeWorldLayer.set(cameraStyle)
-    this.skyWorldLayer.set(cameraStyle)
-  }
-
   public setupGrid(options?: GridOptions) {
     this.gridOptions = resolveGridOptions(options)
-    this.cameraController.setContentMetrics(this.gridOptions)
     this.gridRenderer.render(this.gridOptions)
     this.fitToViewport()
   }
 
   public fitToViewport() {
-    this.cameraController.fitToViewport()
-    this.applyCamera()
+    const rect = (this.app.view as HTMLDivElement).getBoundingClientRect()
+    const viewportWidth = Math.max(rect.width, 1)
+    const viewportHeight = Math.max(rect.height, 1)
+
+    const p = this.viewportOptions.fitPadding
+    const contentWidth = this.gridOptions.width
+    const contentHeight = this.gridOptions.height
+
+    const availableWidth = Math.max(viewportWidth - (p.left ?? 0) - (p.right ?? 0), 1)
+    const availableHeight = Math.max(viewportHeight - (p.top ?? 0) - (p.bottom ?? 0), 1)
+
+    let scale = Math.min(
+      availableWidth / contentWidth,
+      availableHeight / contentHeight
+    )
+    scale = Math.min(
+      Math.max(scale, this.viewportOptions.zoomMin),
+      this.viewportOptions.zoomMax
+    )
+
+    const x = (p.left ?? 0) + (availableWidth - contentWidth * scale) / 2
+    const y = (p.top ?? 0) + (availableHeight - contentHeight * scale) / 2
+
+    const zoomStyle = { x, y, scaleX: scale, scaleY: scale }
+    
+    this.app.tree.zoomLayer.set(zoomStyle)
+    this.app.ground.zoomLayer.set(zoomStyle)
+    this.app.sky.zoomLayer.set(zoomStyle)
+    
+    this.notifyCameraChange()
   }
 
   public panBy(deltaX: number, deltaY: number) {
-    this.cameraController.panBy(deltaX, deltaY)
-    this.applyCamera()
+    this.app.tree.zoomLayer.move(deltaX, deltaY)
+    this.app.ground.zoomLayer.move(deltaX, deltaY)
+    this.app.sky.zoomLayer.move(deltaX, deltaY)
+    this.notifyCameraChange()
   }
 
   public zoomBy(factor: number, origin: WorldPoint) {
-    this.cameraController.zoomBy(factor, origin)
-    this.applyCamera()
-  }
-
-  public zoomAt(nextScale: number, origin: WorldPoint) {
-    this.cameraController.zoomAt(nextScale, origin)
-    this.applyCamera()
+    const scale = this.app.tree.getValidScale(this.getCameraState().scale * factor)
+    this.app.tree.zoomLayer.scaleOfWorld(origin, scale)
+    const { x, y, scaleX, scaleY } = this.app.tree.zoomLayer
+    const zoomStyle = { x, y, scaleX, scaleY }
+    this.app.ground.zoomLayer.set(zoomStyle)
+    this.app.sky.zoomLayer.set(zoomStyle)
+    this.notifyCameraChange()
   }
 
   public getViewportOptions() {
@@ -163,7 +193,12 @@ export class LeaferEngine {
   }
 
   public getCameraState(): CameraState {
-    return this.cameraController.getState()
+    const zl = this.app.tree.zoomLayer
+    return {
+      x: (zl.x as number) || 0,
+      y: (zl.y as number) || 0,
+      scale: (zl.scaleX as number) || 1,
+    }
   }
 
   public getApp() {
@@ -171,19 +206,27 @@ export class LeaferEngine {
   }
 
   public getContentLayer() {
-    return this.contentLayer
+    return this.app.tree
   }
 
   public getOverlayLayer() {
-    return this.overlayLayer
+    return this.app.sky
   }
 
   public screenToWorld(x: number, y: number): WorldPoint {
-    return this.cameraController.screenToWorld(x, y)
+    const { x: cx, y: cy, scale } = this.getCameraState()
+    return {
+      x: (x - cx) / scale,
+      y: (y - cy) / scale,
+    }
   }
 
   public worldToScreen(x: number, y: number): WorldPoint {
-    return this.cameraController.worldToScreen(x, y)
+    const { x: cx, y: cy, scale } = this.getCameraState()
+    return { 
+      x: x * scale + cx, 
+      y: y * scale + cy 
+    }
   }
 
   public isInsideWorld(x: number, y: number) {

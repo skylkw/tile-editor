@@ -650,6 +650,7 @@ export function useLeaferEngine(options: UseLeaferEngineOptions = {}) {
     engineRef.current = engine
     syncAllLayerInstances(engine)
     syncCameraState(engine)
+    engine.onCameraChange = (state) => setCameraState(state)
     updateHoverCell(null)
 
     const hoverOutline = new Rect({
@@ -687,7 +688,6 @@ export function useLeaferEngine(options: UseLeaferEngineOptions = {}) {
 
     let interactionMode: "idle" | "paint" | "erase" | "pan" = "idle"
     let lastCellKey = ""
-    let lastPointer = { x: 0, y: 0 }
     let strokeOccupiedKeys = new Set<string>()
 
     const getScreenPoint = (event: PointerEvent | WheelEvent) => {
@@ -785,10 +785,9 @@ export function useLeaferEngine(options: UseLeaferEngineOptions = {}) {
 
     const handlePointerDown = (event: PointerEvent) => {
       const point = getScreenPoint(event)
-      lastPointer = point
 
       if (event.button === 1 || (event.button === 0 && spacePressedRef.current)) {
-        interactionMode = "pan"
+        return // Let Leafer handle pan
       } else if (event.button === 2) {
         interactionMode = "erase"
         strokeOccupiedKeys = new Set()
@@ -811,13 +810,6 @@ export function useLeaferEngine(options: UseLeaferEngineOptions = {}) {
       updateHoverCell(nextHoverCell)
       updateHoverVisual(nextHoverCell)
 
-      if (interactionMode === "pan") {
-        engine.panBy(point.x - lastPointer.x, point.y - lastPointer.y)
-        lastPointer = point
-        syncCameraState(engine)
-        return
-      }
-
       if (interactionMode === "paint" || interactionMode === "erase") {
         paintAt(interactionMode, point.x, point.y)
       }
@@ -832,15 +824,6 @@ export function useLeaferEngine(options: UseLeaferEngineOptions = {}) {
       if (event && view.hasPointerCapture(event.pointerId)) {
         view.releasePointerCapture(event.pointerId)
       }
-    }
-
-    const handleWheel = (event: WheelEvent) => {
-      const point = getScreenPoint(event)
-      const factor = Math.exp(-event.deltaY * 0.0015)
-      engine.zoomBy(factor, point)
-      syncCameraState(engine)
-      updateHoverCell(engine.screenToCell(point.x, point.y))
-      event.preventDefault()
     }
 
     const handleContextMenu = (event: MouseEvent) => {
@@ -875,7 +858,6 @@ export function useLeaferEngine(options: UseLeaferEngineOptions = {}) {
     view.addEventListener("pointerup", resetInteraction)
     view.addEventListener("pointercancel", resetInteraction)
     view.addEventListener("pointerleave", handlePointerLeave)
-    view.addEventListener("wheel", handleWheel, { passive: false })
     view.addEventListener("contextmenu", handleContextMenu)
     window.addEventListener("keydown", handleKeyDown)
     window.addEventListener("keyup", handleKeyUp)
@@ -886,7 +868,6 @@ export function useLeaferEngine(options: UseLeaferEngineOptions = {}) {
       view.removeEventListener("pointerup", resetInteraction)
       view.removeEventListener("pointercancel", resetInteraction)
       view.removeEventListener("pointerleave", handlePointerLeave)
-      view.removeEventListener("wheel", handleWheel)
       view.removeEventListener("contextmenu", handleContextMenu)
       window.removeEventListener("keydown", handleKeyDown)
       window.removeEventListener("keyup", handleKeyUp)
