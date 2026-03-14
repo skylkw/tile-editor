@@ -640,7 +640,7 @@ export function useLeaferEngine(options: UseLeaferEngineOptions = {}) {
       view,
       grid: resolvedDocument,
       viewport: {
-        zoomMin: 0.1,
+        zoomMin: 0.5,
         zoomMax: 24,
         zoomStep: 1.1,
         fitPadding: { top: 48, right: 48, bottom: 48, left: 48 },

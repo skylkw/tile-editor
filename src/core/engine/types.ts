@@ -32,10 +32,10 @@ export type Padding = {
 }
 
 export interface ViewportOptions {
-  zoomMin?: number
-  zoomMax?: number
-  zoomStep?: number
-  fitPadding?: Padding
+  zoomMin: number
+  zoomMax: number
+  zoomStep: number
+  fitPadding: Padding
 }
 
 /**
@@ -44,7 +44,7 @@ export interface ViewportOptions {
 export interface CreateLeaferEngineOptions {
   view: HTMLDivElement
   grid?: GridOptions
-  viewport?: ViewportOptions
+  viewport: ViewportOptions
 }
 
 /**
