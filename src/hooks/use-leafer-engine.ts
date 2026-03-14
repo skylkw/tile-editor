@@ -87,6 +87,7 @@ export function useLeaferEngine(options: UseLeaferEngineOptions = {}) {
   const activeLayerIdRef = useRef(initialLayerState.id)
   const hoverOutlineRef = useRef<Rect | null>(null)
   const stampPreviewGroupRef = useRef<Group | null>(null)
+  const stampPreviewTintRef = useRef<Rect | null>(null)
   const stampPreviewNodesRef = useRef<StampPreviewNode[]>([])
   const revisionRef = useRef(0)
 
@@ -285,6 +286,7 @@ export function useLeaferEngine(options: UseLeaferEngineOptions = {}) {
 
   const syncStampPreviewNodes = useCallback(() => {
     const previewGroup = stampPreviewGroupRef.current
+    const previewTint = stampPreviewTintRef.current
     const engine = engineRef.current
     const stamp = activeStampRef.current
     if (!previewGroup || !engine) return
@@ -322,18 +324,30 @@ export function useLeaferEngine(options: UseLeaferEngineOptions = {}) {
     })
 
     nextNodes.forEach((node) => previewGroup.add(node))
+    if (previewTint) {
+      previewGroup.add(previewTint)
+    }
     stampPreviewNodesRef.current = nextNodes
   }, [createStampPreviewFallback, getTilesetForGid])
 
   const syncStampPreviewPosition = useCallback(() => {
     const previewGroup = stampPreviewGroupRef.current
+    const previewTint = stampPreviewTintRef.current
     const outline = hoverOutlineRef.current
     const engine = engineRef.current
     const stamp = activeStampRef.current
     const hoverCell = hoverCellRef.current
 
-    if (!previewGroup || !outline || !engine || !stamp?.cells.length || !hoverCell) {
+    if (
+      !previewGroup ||
+      !previewTint ||
+      !outline ||
+      !engine ||
+      !stamp?.cells.length ||
+      !hoverCell
+    ) {
       previewGroup?.set({ visible: false })
+      previewTint?.set({ visible: false })
       outline?.set({ visible: false })
       return
     }
@@ -345,6 +359,13 @@ export function useLeaferEngine(options: UseLeaferEngineOptions = {}) {
       visible: true,
       x: world.x,
       y: world.y,
+    })
+    previewTint.set({
+      visible: true,
+      x: 0,
+      y: 0,
+      width: stamp.width * size,
+      height: stamp.height * size,
     })
 
     outline.set({
@@ -360,6 +381,25 @@ export function useLeaferEngine(options: UseLeaferEngineOptions = {}) {
     syncStampPreviewNodes()
     syncStampPreviewPosition()
   }, [options.activeStamp, syncStampPreviewNodes, syncStampPreviewPosition, tilesets])
+
+  const setStampPreviewBlocked = useCallback((blocked: boolean) => {
+    const previewGroup = stampPreviewGroupRef.current
+    const previewTint = stampPreviewTintRef.current
+    const outline = hoverOutlineRef.current
+    if (!previewGroup || !previewTint || !outline) return
+
+    previewGroup.set({
+      opacity: blocked ? 0.78 : 1,
+    })
+    previewTint.set({
+      visible: blocked,
+      fill: blocked ? "rgba(248, 113, 113, 0.28)" : "rgba(34, 197, 94, 0)",
+    })
+    outline.set({
+      fill: blocked ? "rgba(248, 113, 113, 0.12)" : "rgba(56, 189, 248, 0.08)",
+      stroke: blocked ? "#f87171" : "#38bdf8",
+    })
+  }, [])
 
   const addLayer = useCallback(() => {
     const nextIndex = layerIdCounterRef.current
@@ -616,6 +656,16 @@ export function useLeaferEngine(options: UseLeaferEngineOptions = {}) {
       cornerRadius: 2,
       hitChildren: false,
     })
+    const stampPreviewTint = new Rect({
+      visible: false,
+      x: 0,
+      y: 0,
+      width: 0,
+      height: 0,
+      fill: "rgba(248, 113, 113, 0.28)",
+      cornerRadius: 2,
+      hitChildren: false,
+    })
     const stampPreviewGroup = new Group({
       visible: false,
       opacity: 1,
@@ -623,15 +673,18 @@ export function useLeaferEngine(options: UseLeaferEngineOptions = {}) {
     })
     hoverOutlineRef.current = hoverOutline
     stampPreviewGroupRef.current = stampPreviewGroup
+    stampPreviewTintRef.current = stampPreviewTint
     stampPreviewNodesRef.current = []
     engine.getOverlayLayer().add(stampPreviewGroup)
     engine.getOverlayLayer().add(hoverOutline)
     syncStampPreviewNodes()
     syncStampPreviewPosition()
+    setStampPreviewBlocked(false)
 
     let interactionMode: "idle" | "paint" | "erase" | "pan" = "idle"
     let lastCellKey = ""
     let lastPointer = { x: 0, y: 0 }
+    let strokeOccupiedKeys = new Set<string>()
 
     const getScreenPoint = (event: PointerEvent | WheelEvent) => {
       const rect = view.getBoundingClientRect()
@@ -646,10 +699,48 @@ export function useLeaferEngine(options: UseLeaferEngineOptions = {}) {
       syncStampPreviewPosition()
     }
 
+    const getStampFootprintKeys = (cell: GridCell) => {
+      const stamp = activeStampRef.current
+      if (!stamp?.cells.length) return []
+
+      const metrics = engine.getMapMetrics()
+      const keys: string[] = []
+
+      for (const stampCell of stamp.cells) {
+        const targetCellX = cell.cellX + stampCell.offsetX
+        const targetCellY = cell.cellY + stampCell.offsetY
+
+        if (
+          targetCellX < 0 ||
+          targetCellY < 0 ||
+          targetCellX >= metrics.cols ||
+          targetCellY >= metrics.rows
+        ) {
+          continue
+        }
+
+        keys.push(`${targetCellX},${targetCellY}`)
+      }
+
+      return keys
+    }
+
+    const canApplyStampAt = (cell: GridCell) => {
+      if (!strokeOccupiedKeys.size) return true
+
+      return !getStampFootprintKeys(cell).some((key) => strokeOccupiedKeys.has(key))
+    }
+
     const applyStampAt = (mode: "paint" | "erase", cell: GridCell) => {
       const stamp = activeStampRef.current
       const layer = getLayer()
-      if (!stamp?.cells.length || !layer) return
+      if (!stamp?.cells.length || !layer) return false
+
+      const footprintKeys = getStampFootprintKeys(cell)
+      if (!footprintKeys.length) return false
+      if (strokeOccupiedKeys.size && footprintKeys.some((key) => strokeOccupiedKeys.has(key))) {
+        return false
+      }
 
       for (const stampCell of stamp.cells) {
         const targetCellX = cell.cellX + stampCell.offsetX
@@ -662,7 +753,9 @@ export function useLeaferEngine(options: UseLeaferEngineOptions = {}) {
         }
       }
 
+      footprintKeys.forEach((key) => strokeOccupiedKeys.add(key))
       bumpRevision()
+      return true
     }
 
     const paintAt = (mode: "paint" | "erase", screenX: number, screenY: number) => {
@@ -671,10 +764,18 @@ export function useLeaferEngine(options: UseLeaferEngineOptions = {}) {
       updateHoverVisual(cell)
       if (!cell) return
 
+      const blocked = !canApplyStampAt(cell)
+      setStampPreviewBlocked(blocked)
+
       const cellKey = `${cell.cellX},${cell.cellY},${activeLayerIdRef.current}`
       if (cellKey === lastCellKey) return
 
-      applyStampAt(mode, cell)
+      if (blocked) return
+
+      const applied = applyStampAt(mode, cell)
+      if (!applied) return
+
+      setStampPreviewBlocked(false)
       lastCellKey = cellKey
     }
 
@@ -686,9 +787,11 @@ export function useLeaferEngine(options: UseLeaferEngineOptions = {}) {
         interactionMode = "pan"
       } else if (event.button === 2) {
         interactionMode = "erase"
+        strokeOccupiedKeys = new Set()
         paintAt("erase", point.x, point.y)
       } else if (event.button === 0) {
         interactionMode = "paint"
+        strokeOccupiedKeys = new Set()
         paintAt("paint", point.x, point.y)
       } else {
         return
@@ -719,6 +822,8 @@ export function useLeaferEngine(options: UseLeaferEngineOptions = {}) {
     const resetInteraction = (event?: PointerEvent) => {
       interactionMode = "idle"
       lastCellKey = ""
+      strokeOccupiedKeys = new Set()
+      setStampPreviewBlocked(false)
 
       if (event && view.hasPointerCapture(event.pointerId)) {
         view.releasePointerCapture(event.pointerId)
@@ -742,6 +847,7 @@ export function useLeaferEngine(options: UseLeaferEngineOptions = {}) {
       if (interactionMode === "idle") {
         updateHoverCell(null)
         updateHoverVisual(null)
+        setStampPreviewBlocked(false)
       }
     }
 
@@ -782,8 +888,10 @@ export function useLeaferEngine(options: UseLeaferEngineOptions = {}) {
       window.removeEventListener("keyup", handleKeyUp)
       updateHoverCell(null)
       updateHoverVisual(null)
+      setStampPreviewBlocked(false)
       hoverOutlineRef.current = null
       stampPreviewGroupRef.current = null
+      stampPreviewTintRef.current = null
       stampPreviewNodesRef.current = []
       engine.destroy()
 
@@ -799,6 +907,7 @@ export function useLeaferEngine(options: UseLeaferEngineOptions = {}) {
     syncCameraState,
     syncStampPreviewNodes,
     syncStampPreviewPosition,
+    setStampPreviewBlocked,
     updateHoverCell,
   ])
 
