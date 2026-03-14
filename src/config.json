@@ -1,0 +1,54 @@
+{
+  "camera": {
+    "x": 0,
+    "y": 0,
+    "scale": 1
+  },
+  "viewport": {
+    "zoomMin": 0.5,
+    "zoomMax": 24,
+    "zoomStep": 1.1,
+    "padding": {
+      "top": 16,
+      "right": 16,
+      "bottom": 16,
+      "left": 16
+    },
+    "clampMargin": "50%"
+  },
+  "document": {
+    "cols": 128,
+    "rows": 128,
+    "cellSize": 32,
+    "majorLineEvery": 8,
+    "backgroundColor": "#0b1220",
+    "minorColor": "#1e293b",
+    "majorColor": "#334155",
+    "borderColor": "#f59e0b",
+    "lineThickness": 1,
+    "majorLineThickness": 1.4,
+    "borderThickness": 2
+  },
+  "theme": {
+    "hoverOutline": {
+      "fill": "rgba(56, 189, 248, 0.08)",
+      "stroke": "#38bdf8",
+      "strokeWidth": 1.5,
+      "cornerRadius": 2
+    },
+    "stampPreviewTint": {
+      "fill": "rgba(248, 113, 113, 0.28)",
+      "cornerRadius": 2
+    }
+  },
+  "layer": {
+    "defaultNamePrefix": "Layer "
+  },
+  "shortcuts": {
+    "paintButton": 0,
+    "eraseButton": 2,
+    "panButton": 1,
+    "panKey": "Space",
+    "cancelSelectionKey": "Escape"
+  }
+}

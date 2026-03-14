@@ -1,26 +1,11 @@
-import { Group, Rect } from "leafer-ui"
+import { Rect } from "leafer-ui"
+import type { ILeafer } from "leafer-ui"
 import type {
   Grid,
   GridCell,
   GridOptions,
   WorldPoint,
 } from "../types"
-
-export const DEFAULT_GRID_OPTIONS: Grid = {
-  width: 4096,
-  height: 4096,
-  cellSize: 32,
-  cols: 128,
-  rows: 128,
-  majorLineEvery: 8,
-  backgroundColor: "#0b1220",
-  minorColor: "#1e293b",
-  majorColor: "#334155",
-  borderColor: "#f59e0b",
-  lineThickness: 1,
-  majorLineThickness: 1.4,
-  borderThickness: 2,
-}
 
 function requirePositiveInteger(name: string, value: number) {
   if (!Number.isFinite(value) || value <= 0 || !Number.isInteger(value)) {
@@ -31,46 +16,18 @@ function requirePositiveInteger(name: string, value: number) {
 }
 
 /**
- * 合并并校验网格配置，得到统一的有限画布尺寸。
+ * 校验并计算网格配置，得到包含 width/height 的完整 Grid 对象。
  */
-export function resolveGridOptions(options?: GridOptions): Grid {
-  const cellSize = requirePositiveInteger(
-    "cellSize",
-    options?.cellSize ?? DEFAULT_GRID_OPTIONS.cellSize
-  )
-
-  const cols = requirePositiveInteger(
-    "cols",
-    options?.cols ?? DEFAULT_GRID_OPTIONS.cols
-  )
-  const rows = requirePositiveInteger(
-    "rows",
-    options?.rows ?? DEFAULT_GRID_OPTIONS.rows
-  )
-
-  const width = cols * cellSize
-  const height = rows * cellSize
+export function resolveGridOptions(options: GridOptions): Grid {
+  const cellSize = requirePositiveInteger("cellSize", options.cellSize)
+  const cols = requirePositiveInteger("cols", options.cols)
+  const rows = requirePositiveInteger("rows", options.rows)
 
   return {
-    width,
-    height,
-    cellSize,
-    cols,
-    rows,
-    majorLineEvery: requirePositiveInteger(
-      "majorLineEvery",
-      options?.majorLineEvery ?? DEFAULT_GRID_OPTIONS.majorLineEvery
-    ),
-    backgroundColor:
-      options?.backgroundColor ?? DEFAULT_GRID_OPTIONS.backgroundColor,
-    minorColor: options?.minorColor ?? DEFAULT_GRID_OPTIONS.minorColor,
-    majorColor: options?.majorColor ?? DEFAULT_GRID_OPTIONS.majorColor,
-    borderColor: options?.borderColor ?? DEFAULT_GRID_OPTIONS.borderColor,
-    lineThickness: options?.lineThickness ?? DEFAULT_GRID_OPTIONS.lineThickness,
-    majorLineThickness:
-      options?.majorLineThickness ?? DEFAULT_GRID_OPTIONS.majorLineThickness,
-    borderThickness:
-      options?.borderThickness ?? DEFAULT_GRID_OPTIONS.borderThickness,
+    ...options,
+    width: cols * cellSize,
+    height: rows * cellSize,
+    majorLineEvery: requirePositiveInteger("majorLineEvery", options.majorLineEvery),
   }
 }
 
@@ -109,10 +66,10 @@ export function snapWorldPosition(
  * 网格线渲染器：负责固定画布背景、网格线和边框的创建/销毁。
  */
 export class GridRenderer {
-  private readonly parent: Group
+  private readonly parent: ILeafer
   private gridNodes: Rect[] = []
 
-  constructor(parent: Group) {
+  constructor(parent: ILeafer) {
     this.parent = parent
   }
 

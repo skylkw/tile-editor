@@ -19,23 +19,26 @@ export interface Grid {
 }
 
 /**
- * 外部输入：仅用于创建或局部更新。
- * 注意：输入时不包含计算出的 width/height。
+ * 创建或配置网格时必须提供的参数。
+ * 注意：width 和 height 会自动基于 cols * cellSize 计算得出。
  */
-export type GridOptions = Partial<Omit<Grid, "width" | "height">>
+export type GridOptions = Omit<Grid, "width" | "height">
 
 export type Padding = {
-  top?: number
-  right?: number
-  bottom?: number
-  left?: number
+  top: number
+  right: number
+  bottom: number
+  left: number
 }
 
 export interface ViewportOptions {
   zoomMin: number
   zoomMax: number
   zoomStep: number
-  fitPadding: Padding
+  /** 初始居中时的四周留白 */
+  padding: Padding
+  /** 拖拽时画布必须保留在视口内的最小像素数或百分比 (如 64 或 "50%") */
+  clampMargin: number | string
 }
 
 /**
@@ -43,7 +46,7 @@ export interface ViewportOptions {
  */
 export interface CreateLeaferEngineOptions {
   view: HTMLDivElement
-  grid?: GridOptions
+  grid: GridOptions
   viewport: ViewportOptions
 }
 

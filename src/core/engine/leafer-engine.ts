@@ -30,6 +30,7 @@ import type {
  * 4. 坐标轴工具：提供完备的 `屏幕坐标 <-> 世界坐标 <-> 网格单元` 的转换和合法性校验。
  */
 export class LeaferEngine {
+
   /** Leafer App 实例引用 */
   private readonly app: App
   /** 底层网格线渲染器 */
@@ -61,42 +62,23 @@ export class LeaferEngine {
     // tree 作为主操控层挂载 custom 视口类型接管原生拖动逻辑
     this.app = new App({
       view: options.view,
-      ground: { type: 'block', hittable: false }, 
+      ground: { type: 'design', hittable: false }, 
       tree: { type: 'custom' }, 
-      sky: { type: 'block', hittable: false },
-      wheel: { preventDefault: true },
-      touch: { preventDefault: true },
-      pointer: { preventDefaultMenu: true },
+      sky: { type: 'design', hittable: false },
+      zoom: {
+        min: this.viewportOptions.zoomMin,
+        max: this.viewportOptions.zoomMax,
+      },
+      smooth:true     
     })
-
-    // 2. 约束内容主层视口缩放阈值
-    this.app.tree.config.zoom = {
-      min: this.viewportOptions.zoomMin,
-      max: this.viewportOptions.zoomMax,
-    }
-
-    /**
-     * 【核心功能】同步从属层 (Slave Layers) 的最终变换态。
-     * 直接拿 `tree` 的最终绝对变化矩阵，强行写入其它的从属 `zoomLayer`。
-     * 解决了在分别调用时，各层由于浮点数中心点引起的时间差和漂移误差问题。
-     */
-    const syncSlaveLayers = () => {
-      const { x, y, scaleX, scaleY } = this.app.tree.zoomLayer
-      const zoomStyle = { x, y, scaleX, scaleY }
-      this.app.ground.zoomLayer.set(zoomStyle)
-      this.app.sky.zoomLayer.set(zoomStyle)
-    }
 
     // ------------------------------------------
     // 视口平移监听
     // ------------------------------------------
     this.app.tree.on(MoveEvent.BEFORE_MOVE, (e: MoveEvent) => {
-      // 通过 getValidMove 结合 zoom 限制条件取得真正可发生的偏移量
       const { x, y } = this.app.tree.getValidMove(e.moveX, e.moveY)
-      // 主动应用到主层
       this.app.tree.zoomLayer.move(x, y)
-      // 同步给地基和天空层
-      syncSlaveLayers()
+      this.syncAndClamp()
     })
 
     this.app.tree.on(MoveEvent.MOVE, () => {
@@ -107,12 +89,9 @@ export class LeaferEngine {
     // 视口缩放监听
     // ------------------------------------------
     this.app.tree.on(ZoomEvent.BEFORE_ZOOM, (e: ZoomEvent) => {
-      // 控制并获取合法化后的目标缩放缩率
       const scale = this.app.tree.getValidScale(e.scale)
-      // 在主层应用（注意使用事件源 e 带入原生 client 中心点作为原点）
       this.app.tree.zoomLayer.scaleOfWorld(e, scale)
-      // 同步给地基和天空层
-      syncSlaveLayers()
+      this.syncAndClamp()
     })
 
     this.app.tree.on(ZoomEvent.ZOOM, () => {
@@ -120,7 +99,7 @@ export class LeaferEngine {
     })
 
     // 3. 构建地基网络层，将实例传递给负责绘制 Grid 的渲染器
-    this.gridRenderer = new GridRenderer(this.app.ground as any)
+    this.gridRenderer = new GridRenderer(this.app.ground)
     this.gridRenderer.render(this.gridOptions)
 
     // 4. 重置一次视口将网格内容居中铺满
@@ -128,6 +107,62 @@ export class LeaferEngine {
     
     // 5. 将自身响应式绑定给浏览器外壳窗口
     this.bindResizeObserver(options.view)
+  }
+
+  /**
+   * 视口边界约束。
+   * 保证缩放后的画布内容矩形至少有一部分留在视口内，
+   * 防止用户把画布完全拖出屏幕。
+   * 
+   * 策略：画布右下角不能超过视口左上角 + margin，
+   *        画布左上角不能超过视口右下角 - margin。
+   */
+  private clampToViewport() {
+    const rect = (this.app.view as HTMLDivElement).getBoundingClientRect()
+    const viewportWidth = rect.width || 1
+    const viewportHeight = rect.height || 1
+
+    const zl = this.app.tree.zoomLayer
+    let x = (zl.x as number) || 0
+    let y = (zl.y as number) || 0
+    const scale = (zl.scaleX as number) || 1
+
+    const contentW = this.gridOptions.width * scale
+    const contentH = this.gridOptions.height * scale
+
+    // 拖拽边界：确保画布不会被完全拖出视口
+    let mx = 0
+    let my = 0
+    const cm = this.viewportOptions.clampMargin
+
+    if (typeof cm === 'string' && cm.endsWith('%')) {
+      const ratio = parseFloat(cm) / 100
+      mx = viewportWidth * ratio
+      my = viewportHeight * ratio
+    } else {
+      mx = my = Number(cm) || 0
+    }
+
+    const xMin = mx - contentW
+    const xMax = viewportWidth - mx
+    const yMin = my - contentH
+    const yMax = viewportHeight - my
+
+    x = Math.max(xMin, Math.min(xMax, x))
+    y = Math.max(yMin, Math.min(yMax, y))
+
+    zl.set({ x, y })
+  }
+
+  /**
+   * 将主层的变换强制同步给从层，并应用边界约束。
+   */
+  private syncAndClamp() {
+    this.clampToViewport()
+    const { x, y, scaleX, scaleY } = this.app.tree.zoomLayer
+    const zoomStyle = { x, y, scaleX, scaleY }
+    this.app.ground.zoomLayer.set(zoomStyle)
+    this.app.sky.zoomLayer.set(zoomStyle)
   }
 
   /**
@@ -159,7 +194,7 @@ export class LeaferEngine {
    * 
    * @param options 最新的网格配置
    */
-  public setupGrid(options?: GridOptions) {
+  public setupGrid(options: GridOptions) {
     this.gridOptions = resolveGridOptions(options)
     this.gridRenderer.render(this.gridOptions)
     this.fitToViewport()
@@ -179,12 +214,12 @@ export class LeaferEngine {
     const viewportWidth = Math.max(rect.width, 1)
     const viewportHeight = Math.max(rect.height, 1)
 
-    const p = this.viewportOptions.fitPadding
+    const p = this.viewportOptions.padding
     const contentWidth = this.gridOptions.width
     const contentHeight = this.gridOptions.height
 
-    const availableWidth = Math.max(viewportWidth - (p.left ?? 0) - (p.right ?? 0), 1)
-    const availableHeight = Math.max(viewportHeight - (p.top ?? 0) - (p.bottom ?? 0), 1)
+    const availableWidth = Math.max(viewportWidth - p.left - p.right, 1)
+    const availableHeight = Math.max(viewportHeight - p.top - p.bottom, 1)
 
     // 算出双向适应比，取极小值使得不越界
     let scale = Math.min(
@@ -197,8 +232,8 @@ export class LeaferEngine {
     )
 
     // 计算世界原点的偏移
-    const x = (p.left ?? 0) + (availableWidth - contentWidth * scale) / 2
-    const y = (p.top ?? 0) + (availableHeight - contentHeight * scale) / 2
+    const x = p.left + (availableWidth - contentWidth * scale) / 2
+    const y = p.top + (availableHeight - contentHeight * scale) / 2
 
     const zoomStyle = { x, y, scaleX: scale, scaleY: scale }
     
@@ -218,8 +253,7 @@ export class LeaferEngine {
    */
   public panBy(deltaX: number, deltaY: number) {
     this.app.tree.zoomLayer.move(deltaX, deltaY)
-    this.app.ground.zoomLayer.move(deltaX, deltaY)
-    this.app.sky.zoomLayer.move(deltaX, deltaY)
+    this.syncAndClamp()
     this.notifyCameraChange()
   }
 
@@ -235,12 +269,8 @@ export class LeaferEngine {
     // 主层缩放运算
     this.app.tree.zoomLayer.scaleOfWorld(origin, scale)
     
-    // 强制抽离主层算后的最终位置以防各自换算带来小数点飘移
-    const { x, y, scaleX, scaleY } = this.app.tree.zoomLayer
-    const zoomStyle = { x, y, scaleX, scaleY }
-    
-    this.app.ground.zoomLayer.set(zoomStyle)
-    this.app.sky.zoomLayer.set(zoomStyle)
+    // 边界约束 + 同步从层
+    this.syncAndClamp()
     
     this.notifyCameraChange()
   }

@@ -27,7 +27,6 @@ import type {
 } from "./features/editor/types"
 import {
   DEFAULT_BRUSH_TRANSFORM,
-  DEFAULT_DOCUMENT,
   clamp,
   getBoundsFromTiles,
   getBrushTransformSummary,
@@ -45,6 +44,8 @@ import {
   transformStamp,
 } from "./features/editor/utils"
 import { useLeaferEngine } from "./hooks/use-leafer-engine"
+import config from "./config.json"
+import type { ViewportOptions } from "./core/engine/types"
 
 async function createObjectUrlFromPath(path: string) {
   const bytes = await readFile(path)
@@ -54,8 +55,8 @@ async function createObjectUrlFromPath(path: string) {
 
 export default function App() {
   const [documentConfig, setDocumentConfig] =
-    useState<DocumentSettings>(DEFAULT_DOCUMENT)
-  const [draftConfig, setDraftConfig] = useState<DocumentSettings>(DEFAULT_DOCUMENT)
+    useState<DocumentSettings>(config.document)
+  const [draftConfig, setDraftConfig] = useState<DocumentSettings>(config.document)
   const [mapPath, setMapPath] = useState("")
   const [activeTilesetKey, setActiveTilesetKey] = useState("")
   const [activeGid, setActiveGid] = useState(1)
@@ -107,6 +108,8 @@ export default function App() {
     importTiledMap,
   } = useLeaferEngine({
     document: documentConfig,
+    viewport: config.viewport as ViewportOptions,
+    initialCamera: config.camera,
     activeStamp: transformedStamp,
   })
 
@@ -146,6 +149,17 @@ export default function App() {
 
     setSelectedStamp(activeTileset.createStamp(selectedTileGids))
   }, [activeTileset, selectedTileGids])
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.code === config.shortcuts.cancelSelectionKey) {
+        setSelectedTileGids([])
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [])
 
   const brushSummary = useMemo(
     () => getBrushTransformSummary(brushTransform),
@@ -420,7 +434,8 @@ export default function App() {
   ])
 
   const handleApplyDocument = useCallback(async () => {
-    const nextConfig = {
+    const nextConfig: DocumentSettings = {
+      ...draftConfig,
       cols: Number(draftConfig.cols),
       rows: Number(draftConfig.rows),
       cellSize: Number(draftConfig.cellSize),

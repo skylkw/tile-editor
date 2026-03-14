@@ -10,13 +10,7 @@ import type {
   DocumentSettings,
   ImageBounds,
 } from "./types"
-
-export const DEFAULT_DOCUMENT: DocumentSettings = {
-  cols: 128,
-  rows: 128,
-  cellSize: 32,
-  majorLineEvery: 8,
-}
+import config from "@/config.json"
 
 export const DEFAULT_BRUSH_TRANSFORM: BrushTransformState = {
   flipH: false,
@@ -222,10 +216,10 @@ export function getDocumentConfigFromMap(map: TiledMap): DocumentSettings | null
   if (map.tilewidth !== map.tileheight) return null
 
   return {
+    ...config.document,
     cols: map.width,
     rows: map.height,
     cellSize: map.tilewidth,
-    majorLineEvery: DEFAULT_DOCUMENT.majorLineEvery,
   }
 }
 
