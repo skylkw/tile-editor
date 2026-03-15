@@ -1,10 +1,9 @@
 import {
   clearTiledGidFlags,
   encodeTiledGid,
-  type TiledGidFlags,
 } from "@/core/tilemap/tiled-gid"
+import type { TiledGidFlags, TilesetStamp, TilesetTileDescriptor } from "@/types/tilemap"
 import type { TiledMap, TiledTilesetRef } from "@/types/tiled"
-import type { TilesetStamp, TilesetTileDescriptor } from "@/core/tilemap/tileset"
 import type {
   BrushTransformState,
   ImageBounds,

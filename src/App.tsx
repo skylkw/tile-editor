@@ -11,7 +11,7 @@ import {
 import config from "./config.json"
 import type { GridConfig, ViewportConfig } from "@/types/engine"
 import type { TiledMap } from "@/types/tiled"
-import type { TilesetStamp, TilesetTileDescriptor } from "./core/tilemap/tileset"
+import type { TilesetStamp, TilesetTileDescriptor } from "@/types/tilemap"
 import { Tileset } from "./core/tilemap/tileset"
 import {
   BrushWorkspaceColumn,
@@ -20,7 +20,7 @@ import {
   TilesetLibraryColumn,
   TilesetPreviewColumn,
   WorkspaceColumn,
-} from "./features/editor/components"
+} from "./components/editor"
 import type {
   BrushTransformState,
   ImageBounds,
@@ -43,7 +43,7 @@ import {
   toggleBrushVerticalFlip,
   transformBrushGid,
   transformStamp,
-} from "./features/editor/utils"
+} from "./components/editor/utils"
 import { useLeaferEngine } from "./hooks/use-leafer-engine"
 
 async function createObjectUrlFromPath(path: string) {

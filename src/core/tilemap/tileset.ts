@@ -1,41 +1,17 @@
+/**
+ * Tileset (图集) 管理模块
+ * 
+ * 负责解析 Tileset 图片、处理切片逻辑、并生成缩略图 URL。
+ */
 import type { TiledTilesetRef } from "@/types/tiled"
+import type {
+  TilesetConfig,
+  TilesetTileDescriptor,
+  TilesetStamp,
+} from "@/types/tilemap"
 import { clearTiledGidFlags, decodeTiledGid } from "./tiled-gid"
 
-export interface TilesetConfig {
-  name: string
-  image: string
-  sourcePath?: string
-  tileWidth: number
-  tileHeight: number
-  margin?: number
-  spacing?: number
-  firstGid?: number
-}
-
-export interface TilesetTileDescriptor {
-  gid: number
-  localId: number
-  column: number
-  row: number
-  x: number
-  y: number
-  width: number
-  height: number
-}
-
-export interface TilesetStampCell {
-  offsetX: number
-  offsetY: number
-  gid: number
-}
-
-export interface TilesetStamp {
-  width: number
-  height: number
-  primaryGid: number
-  cells: TilesetStampCell[]
-}
-
+/** 校验正整数 */
 function requirePositiveInteger(name: string, value: number) {
   if (!Number.isFinite(value) || value <= 0 || !Number.isInteger(value)) {
     throw new Error(`${name} 必须是正整数`)
@@ -44,6 +20,7 @@ function requirePositiveInteger(name: string, value: number) {
   return value
 }
 
+/** 异步加载图片 */
 function loadImage(url: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const image = new globalThis.Image()
@@ -55,9 +32,10 @@ function loadImage(url: string) {
 }
 
 /**
- * Tileset 管理器：
- * - 异步加载图集并解析切片信息
- * - 按需缓存单 tile 图片，用于画布内渲染和面板预览
+ * Tileset 管理类：
+ * - 维护图集元数据
+ * - 缓存单 Tile 的图片 URL
+ * - 提供根据坐标或 ID 查找 Tile 的方法
  */
 export class Tileset {
   public readonly name: string
@@ -77,6 +55,7 @@ export class Tileset {
 
   private readonly imageElement: HTMLImageElement
   private readonly tiles: TilesetTileDescriptor[]
+  // 缓存切割后的单 Tile 图片 DataURL，避免重复创建 Canvas 性能损耗
   private readonly tileUrlCache = new Map<number, string>()
 
   private constructor(config: TilesetConfig, imageElement: HTMLImageElement) {
@@ -92,6 +71,7 @@ export class Tileset {
     this.imageWidth = imageElement.width
     this.imageHeight = imageElement.height
 
+    // 计算总列数
     this.columns = Math.max(
       0,
       Math.floor(
@@ -99,6 +79,7 @@ export class Tileset {
           (this.tileWidth + this.spacing)
       )
     )
+    // 计算总行数
     this.rows = Math.max(
       0,
       Math.floor(
@@ -113,6 +94,7 @@ export class Tileset {
       throw new Error("图集尺寸与 tile 大小不匹配，无法切片")
     }
 
+    // 预先生成所有 Tile 的位置描述信息
     this.tiles = Array.from({ length: this.tileCount }, (_, index) => {
       const localId = index + 1
       const column = index % this.columns
@@ -131,37 +113,50 @@ export class Tileset {
     })
   }
 
+  /**
+   * 工厂方法：从 URL 加载图片并初始化 Tileset。
+   */
   public static async fromUrl(config: TilesetConfig) {
     const imageElement = await loadImage(config.image)
     return new Tileset(config, imageElement)
   }
 
+  /** 返回所有 Tile 描述 */
   public listTiles() {
     return this.tiles
   }
 
+  /** 返回所有 GID 列表 */
   public listTileGids() {
     return this.tiles.map((tile) => tile.gid)
   }
 
+  /** 检查某个 GID 是否属于此图集 */
   public containsGid(gid: number) {
     return gid >= this.firstGid && gid <= this.lastGid
   }
 
+  /** 批量获取 Tile 描述 */
   public getTileDescriptors(gids: number[]) {
     const gidSet = new Set(gids)
     return this.tiles.filter((tile) => gidSet.has(tile.gid))
   }
 
+  /** 获取单个 Tile 描述 */
   public getTileDescriptor(gid: number) {
     const resolvedGid = clearTiledGidFlags(gid)
     return this.tiles.find((tile) => tile.gid === resolvedGid) ?? null
   }
 
+  /**
+   * 根据选中的一组 GID 创建一个 Stamp。
+   * 会自动计算包围盒和相对偏移。
+   */
   public createStamp(gids: number[]): TilesetStamp | null {
     const descriptors = this.getTileDescriptors(gids)
     if (!descriptors.length) return null
 
+    // 按行、列排序，确保左上角第一个是 Primary Tile
     const sorted = [...descriptors].sort((left, right) => {
       if (left.row !== right.row) return left.row - right.row
       return left.column - right.column
@@ -184,6 +179,7 @@ export class Tileset {
     }
   }
 
+  /** 获取索引对应的像素位置信息 */
   public getTileRect(gid: number) {
     const tile = this.getTileDescriptor(gid)
     if (!tile) return null
@@ -196,6 +192,7 @@ export class Tileset {
     }
   }
 
+  /** 根据图集图片上的点击位置查找 Tile */
   public getTileAtImagePoint(imageX: number, imageY: number) {
     return (
       this.tiles.find(
@@ -208,6 +205,7 @@ export class Tileset {
     )
   }
 
+  /** 根据矩形区域选择一组 Tile */
   public getTilesInImageBounds(
     startX: number,
     startY: number,
@@ -232,15 +230,21 @@ export class Tileset {
     })
   }
 
+  /**
+   * 获取单个瓷砖的图片 URL (DataURL)。
+   * 支持应用 Tiled 变换标记 (翻转/旋转)。
+   */
   public getTileImageUrl(gid: number) {
     const decoded = decodeTiledGid(gid)
     const rawGid = decoded.raw
+    // 检查缓存，包含变换后的 GID 也是独立缓存的
     const cached = this.tileUrlCache.get(rawGid)
     if (cached) return cached
 
     const rect = this.getTileRect(decoded.gid)
     if (!rect) return null
 
+    // 创建离屏 Canvas 进行切片绘制和变换
     const canvas = document.createElement("canvas")
     canvas.width = this.tileWidth
     canvas.height = this.tileHeight
@@ -248,9 +252,12 @@ export class Tileset {
     const context = canvas.getContext("2d")
     if (!context) return null
 
-    context.imageSmoothingEnabled = false
+    context.imageSmoothingEnabled = false // 禁用平滑，保持像素锐利
     context.clearRect(0, 0, canvas.width, canvas.height)
+    
+    // 应用翻转和旋转变换
     this.applyTiledTransform(context, decoded)
+    
     context.drawImage(
       this.imageElement,
       rect.x,
@@ -268,6 +275,9 @@ export class Tileset {
     return dataUrl
   }
 
+  /**
+   * 转换为导出所需的 Tiled 引用对象。
+   */
   public toTiledTilesetRef(): TiledTilesetRef {
     return {
       firstgid: this.firstGid,
@@ -282,6 +292,9 @@ export class Tileset {
     }
   }
 
+  /**
+   * 在 Canvas 上应用 Tiled 的变换逻辑 (基于矩阵)。
+   */
   private applyTiledTransform(
     context: CanvasRenderingContext2D,
     decoded: ReturnType<typeof decodeTiledGid>
@@ -294,6 +307,7 @@ export class Tileset {
     let e = 0
     let f = 0
 
+    // 矩阵乘法
     const multiply = (
       nextA: number,
       nextB: number,
@@ -317,6 +331,7 @@ export class Tileset {
       f = nextB * currentE + nextD * currentF + nextF
     }
 
+    // Tiled 变换顺序：Diagonal(对角) -> Horizontal(水平) -> Vertical(垂直)
     if (decoded.flipD) {
       multiply(0, 1, 1, 0, 0, 0)
     }

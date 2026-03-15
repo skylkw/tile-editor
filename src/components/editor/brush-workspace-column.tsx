@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button"
-import type { TilesetTileDescriptor } from "@/core/tilemap/tileset"
+import type { TilesetTileDescriptor } from "@/types/tilemap"
 import { PanelCard } from "./panel-card"
 
 type StampPreviewGrid = {

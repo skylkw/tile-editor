@@ -3,7 +3,8 @@ import { createLeaferEngine, LeaferEngine } from "@/core/engine/leafer-engine"
 import { buildTiledMap } from "@/core/io/tiled-map"
 import { TileLayer } from "@/core/tilemap/tile-layer"
 import { clearTiledGidFlags } from "@/core/tilemap/tiled-gid"
-import type { Tileset, TilesetStamp } from "@/core/tilemap/tileset"
+import type { Tileset } from "@/core/tilemap/tileset"
+import type { TilesetStamp } from "@/types/tilemap"
 import type {
   CameraState,
   GridCell,
