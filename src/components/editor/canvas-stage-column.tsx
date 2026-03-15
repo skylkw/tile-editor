@@ -21,7 +21,7 @@ export function CanvasStageColumn(props: CanvasStageColumnProps) {
   } = props
 
   return (
-    <main className="relative h-full min-h-[640px] min-w-0 overflow-hidden rounded-[34px] border border-white/10 bg-slate-950/65 shadow-[0_40px_120px_rgba(0,0,0,0.45)] backdrop-blur-sm">
+    <main className="relative h-full min-w-0 overflow-hidden rounded-none border-0 bg-slate-950/65 shadow-[0_40px_120px_rgba(0,0,0,0.45)]">
       <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(21,41,66,0.65),rgba(4,8,15,0.95))]" />
       <div
         ref={viewRef}

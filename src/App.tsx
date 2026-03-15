@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react"
 import config from "./config.json"
@@ -13,10 +14,10 @@ import type { TilesetStamp } from "@/types/tilemap"
 import { Tileset } from "./core/tilemap/tileset"
 import {
   CanvasStageColumn,
-  LayersColumn,
-  WorkspaceColumn,
 } from "./components/editor"
 import { TilesetWorkspaceColumn } from "./components/editor/tileset-workspace-column"
+import { ProjectPanel } from "./components/editor/project-panel"
+import { Button } from "./components/ui/button"
 import type {
   BrushTransformState,
   TilesetLoadSource,
@@ -60,6 +61,36 @@ export default function App() {
 
   // blobUrlsRef 已移除，因为改用 convertFileSrc 直接加载本地资源
   // tilesetImageRef 用不到了，现在 TilesetPreviewColumn 内部由 Leafer 接管
+
+  // Resizable splitter state
+  const [tilesetPanelWidth, setTilesetPanelWidth] = useState(380)
+  const [isSplitterDragging, setIsSplitterDragging] = useState(false)
+  const splitterStartXRef = useRef(0)
+  const splitterStartWidthRef = useRef(380)
+
+  const handleSplitterMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    setIsSplitterDragging(true)
+    splitterStartXRef.current = e.clientX
+    splitterStartWidthRef.current = tilesetPanelWidth
+
+    const onMouseMove = (ev: MouseEvent) => {
+      const dx = ev.clientX - splitterStartXRef.current
+      const newWidth = Math.max(280, Math.min(600, splitterStartWidthRef.current + dx))
+      setTilesetPanelWidth(newWidth)
+    }
+    const onMouseUp = () => {
+      setIsSplitterDragging(false)
+      document.removeEventListener("mousemove", onMouseMove)
+      document.removeEventListener("mouseup", onMouseUp)
+      document.body.style.cursor = ""
+      document.body.style.userSelect = ""
+    }
+    document.addEventListener("mousemove", onMouseMove)
+    document.addEventListener("mouseup", onMouseUp)
+    document.body.style.cursor = "col-resize"
+    document.body.style.userSelect = "none"
+  }, [tilesetPanelWidth])
 
   const transformedStamp = useMemo(
     () => transformStamp(selectedStamp, brushTransform),
@@ -541,62 +572,75 @@ export default function App() {
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-[radial-gradient(circle_at_top,#17304f_0%,#0a1220_45%,#04070d_100%)] text-slate-100">
-      <header className="border-b border-white/10 bg-black/20 px-6 py-5 backdrop-blur-xl">
-        <div className="flex items-start justify-between gap-6">
-          <div>
-            <p className="text-xs uppercase tracking-[0.35em] text-amber-300/80">
-              Tile Editor
-            </p>
-            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-white">
-              Five-Column Finite Workspace
-            </h1>
-            <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-300">
-              固定画布、有限 tilemap、受控缩放和平移、多图层、多 tileset、stamp 旋转翻转与无重叠连续绘制现在放进同一套工作流里了。
-            </p>
+      <header className="border-b border-white/5 bg-slate-950/40 px-6 py-3 backdrop-blur-md">
+        <div className="flex items-center justify-between gap-6">
+          <div className="flex items-center gap-4">
+            <div>
+              <p className="text-[10px] uppercase font-bold tracking-[0.4em] text-teal-400/80">
+                Tile Editor
+              </p>
+              <h1 className="text-lg font-bold tracking-tight text-white/90">
+                Workspace
+              </h1>
+            </div>
+            <div className="h-8 w-px bg-white/10 mx-2" />
+            <div className="flex items-center gap-3">
+               <div className="flex gap-1.5">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleImportMap}
+                    disabled={loadingMapIO}
+                    className="h-8 rounded-lg border-white/10 bg-white/5 text-xs text-slate-200 hover:bg-white/10"
+                  >
+                    导入地图
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleExportMap}
+                    disabled={loadingMapIO}
+                    className="h-8 rounded-lg bg-teal-400 px-4 text-xs font-semibold text-slate-950 hover:bg-teal-300"
+                  >
+                    导出地图
+                  </Button>
+               </div>
+               <div className="flex items-center gap-2 ml-2">
+                  <div className={`h-2 w-2 rounded-full ${isDirty ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`} />
+                  <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">
+                    {isDirty ? 'Unsaved Changes' : 'All Saved'}
+                  </span>
+               </div>
+               {mapPath && (
+                 <span className="text-[10px] text-slate-500 max-w-[200px] truncate ml-2">
+                   {mapPath} (v{revision})
+                 </span>
+               )}
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2 text-xs text-slate-300">
-            <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2">
-              Canvas {mapMetrics.width} x {mapMetrics.height}
-            </div>
-            <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2">
-              Grid {mapMetrics.cols} x {mapMetrics.rows}
-            </div>
-            <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2">
-              Zoom {(cameraState.scale * 100).toFixed(0)}%
-            </div>
-            <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2">
-              Layers {layers.length}
-            </div>
-            <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2">
-              Tilesets {tilesets.length}
-            </div>
+          
+          <div className="flex items-center gap-3">
+             {errorMessage && (
+                <div className="bg-rose-500/20 text-rose-200 px-3 py-1 rounded-lg text-xs border border-rose-500/30">
+                  {errorMessage}
+                </div>
+             )}
+             <div className="flex items-center gap-2 rounded-full border border-white/5 bg-black/20 px-4 py-1.5 text-[10px] text-slate-400">
+               <span>Z: {(cameraState.scale * 100).toFixed(0)}%</span>
+               <span className="opacity-20">|</span>
+               <span>L: {layers.length}</span>
+               <span className="opacity-20">|</span>
+               <span>T: {tilesets.length}</span>
+             </div>
           </div>
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1 gap-4 overflow-x-auto p-4">
-        <div className="flex w-[320px] shrink-0 flex-col gap-4 overflow-y-auto pr-1">
-          <WorkspaceColumn
-            mapPath={mapPath}
-            isDirty={isDirty}
-            revision={revision}
-            loadingMapIO={loadingMapIO}
-            draftConfig={draftConfig}
-            mapMetrics={{ cols: mapMetrics.cols, rows: mapMetrics.rows }}
-            onImportMap={handleImportMap}
-            onExportMap={handleExportMap}
-            onApplyDocument={handleApplyDocument}
-            onDraftChange={handleDraftChange}
-          />
-
-          {errorMessage ? (
-            <section className="rounded-[28px] border border-rose-300/30 bg-rose-400/10 px-4 py-3 text-sm text-rose-100 shadow-[0_24px_60px_rgba(0,0,0,0.28)]">
-              {errorMessage}
-            </section>
-          ) : null}
-        </div>
-
-        <div className="flex w-[320px] shrink-0 flex-col gap-4 overflow-y-auto pr-1">
+      <div className="flex min-h-0 flex-1">
+        {/* Left: Tileset Panel (resizable) */}
+        <div
+          className="shrink-0 border-r border-white/5 bg-slate-950/30"
+          style={{ width: tilesetPanelWidth }}
+        >
           <TilesetWorkspaceColumn
             tilesets={tilesets}
             activeTileset={activeTileset}
@@ -617,8 +661,39 @@ export default function App() {
           />
         </div>
 
-        <div className="flex w-[320px] shrink-0 flex-col gap-4 overflow-y-auto pr-1">
-          <LayersColumn
+        {/* Resizable splitter handle */}
+        <div
+          className={`w-1.5 shrink-0 cursor-col-resize transition-colors ${
+            isSplitterDragging ? "bg-teal-400/40" : "bg-transparent hover:bg-white/10"
+          }`}
+          onMouseDown={handleSplitterMouseDown}
+        >
+          <div className="flex h-full items-center justify-center">
+            <div className={`h-8 w-0.5 rounded-full transition-colors ${
+              isSplitterDragging ? "bg-teal-400/80" : "bg-white/15"
+            }`} />
+          </div>
+        </div>
+
+        {/* Center: Canvas (fills remaining) */}
+        <div className="min-w-0 flex-1">
+          <CanvasStageColumn
+            viewRef={viewRef}
+            mapMetrics={mapMetrics}
+            cameraScale={cameraState.scale}
+            hoverCell={hoverCell}
+            activeLayerName={activeLayer?.name ?? "-"}
+            stampLabel={transformedStamp ? `${transformedStamp.width} x ${transformedStamp.height}` : "-"}
+          />
+        </div>
+
+        {/* Right: Project Panel (Canvas + Layers) */}
+        <div className="w-[280px] shrink-0 border-l border-white/5 bg-slate-950/30 overflow-y-auto">
+          <ProjectPanel
+            draftConfig={draftConfig}
+            mapMetrics={{ cols: mapMetrics.cols, rows: mapMetrics.rows }}
+            onApplyDocument={handleApplyDocument}
+            onDraftChange={handleDraftChange}
             layers={layers}
             activeLayerId={activeLayerId}
             onSetActiveLayerId={setActiveLayerId}
@@ -628,17 +703,6 @@ export default function App() {
             onMoveLayerDown={moveLayerDown}
             onRenameLayer={renameLayer}
             onToggleLayerVisibility={toggleLayerVisibility}
-          />
-        </div>
-
-        <div className="min-w-[720px] flex-1">
-          <CanvasStageColumn
-            viewRef={viewRef}
-            mapMetrics={mapMetrics}
-            cameraScale={cameraState.scale}
-            hoverCell={hoverCell}
-            activeLayerName={activeLayer?.name ?? "-"}
-            stampLabel={transformedStamp ? `${transformedStamp.width} x ${transformedStamp.height}` : "-"}
           />
         </div>
       </div>
