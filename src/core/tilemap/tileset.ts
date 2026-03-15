@@ -10,23 +10,24 @@ import type {
   TilesetStamp,
 } from "@/types/tilemap"
 import { clearTiledGidFlags, decodeTiledGid } from "./tiled-gid"
-
-/** 校验正整数 */
-function requirePositiveInteger(name: string, value: number) {
-  if (!Number.isFinite(value) || value <= 0 || !Number.isInteger(value)) {
-    throw new Error(`${name} 必须是正整数`)
-  }
-
-  return value
-}
+import { getRelativePath, normalizePath } from "@/components/editor/utils"
+import { convertFileSrc } from "@tauri-apps/api/core"
 
 /** 异步加载图片 */
-function loadImage(url: string) {
+function loadImage(source: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const image = new globalThis.Image()
+    image.crossOrigin = "anonymous" // 关键：允许画布读取跨域资源（如 asset:// 协议图片）
+
+    // 检查是否已经是网络/Blob/Data/Asset URL，如果不是则视为本地路径进行转换
+    const isUrl = /^(http|https|blob|data|asset):/i.test(source)
+    const url = isUrl ? source : convertFileSrc(source)
 
     image.onload = () => resolve(image)
-    image.onerror = () => reject(new Error("图集加载失败"))
+    image.onerror = (e) => {
+      console.error("loadImage error for source:", source, "transformed url:", url, e)
+      reject(new Error("图集加载失败"))
+    }
     image.src = url
   })
 }
@@ -38,14 +39,7 @@ function loadImage(url: string) {
  * - 提供根据坐标或 ID 查找 Tile 的方法
  */
 export class Tileset {
-  public readonly name: string
-  public readonly image: string
-  public readonly sourcePath?: string
-  public readonly tileWidth: number
-  public readonly tileHeight: number
-  public readonly margin: number
-  public readonly spacing: number
-  public readonly firstGid: number
+  public readonly config: TilesetConfig
   public readonly imageWidth: number
   public readonly imageHeight: number
   public readonly columns: number
@@ -58,15 +52,18 @@ export class Tileset {
   // 缓存切割后的单 Tile 图片 DataURL，避免重复创建 Canvas 性能损耗
   private readonly tileUrlCache = new Map<number, string>()
 
+  // 快捷访问配置项的 Getters
+  get name() { return this.config.name }
+  get image() { return this.imageElement.src } // 确保返回的是经过 convertFileSrc 处理后的、可供浏览器显示的 URL
+  get sourcePath() { return this.config.sourcePath }
+  get tileWidth() { return this.config.tileWidth }
+  get tileHeight() { return this.config.tileHeight }
+  get margin() { return this.config.margin }
+  get spacing() { return this.config.spacing }
+  get firstGid() { return this.config.firstGid }
+
   private constructor(config: TilesetConfig, imageElement: HTMLImageElement) {
-    this.name = config.name
-    this.image = config.image
-    this.sourcePath = config.sourcePath
-    this.tileWidth = requirePositiveInteger("tileWidth", config.tileWidth)
-    this.tileHeight = requirePositiveInteger("tileHeight", config.tileHeight)
-    this.margin = config.margin
-    this.spacing = config.spacing
-    this.firstGid = config.firstGid
+    this.config = config
     this.imageElement = imageElement
     this.imageWidth = imageElement.width
     this.imageHeight = imageElement.height
@@ -278,11 +275,21 @@ export class Tileset {
   /**
    * 转换为导出所需的 Tiled 引用对象。
    */
-  public toTiledTilesetRef(): TiledTilesetRef {
+  public toTiledTilesetRef(options?: { mapPath?: string }): TiledTilesetRef {
+    let imagePath = this.sourcePath ?? this.image
+
+    if (options?.mapPath && this.sourcePath) {
+      imagePath = getRelativePath(options.mapPath, this.sourcePath)
+    } else if (this.sourcePath) {
+      imagePath = normalizePath(this.sourcePath)
+    }
+
     return {
       firstgid: this.firstGid,
       name: this.name,
-      image: this.sourcePath ?? this.image,
+      image: imagePath,
+      imagewidth: this.imageWidth,
+      imageheight: this.imageHeight,
       tilewidth: this.tileWidth,
       tileheight: this.tileHeight,
       tilecount: this.tileCount,

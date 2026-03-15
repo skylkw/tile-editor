@@ -1,38 +1,30 @@
-import { open, save } from "@tauri-apps/plugin-dialog"
-import { readFile, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs"
+import { open } from "@tauri-apps/plugin-dialog"
+import { mkdir, readFile, readTextFile, writeTextFile, writeFile } from "@tauri-apps/plugin-fs"
 import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
-  type PointerEvent as ReactPointerEvent,
 } from "react"
 import config from "./config.json"
 import type { GridConfig, ViewportConfig } from "@/types/engine"
 import type { TiledMap } from "@/types/tiled"
-import type { TilesetStamp, TilesetTileDescriptor } from "@/types/tilemap"
+import type { TilesetStamp } from "@/types/tilemap"
 import { Tileset } from "./core/tilemap/tileset"
 import {
-  BrushWorkspaceColumn,
   CanvasStageColumn,
   LayersColumn,
-  TilesetLibraryColumn,
-  TilesetPreviewColumn,
   WorkspaceColumn,
 } from "./components/editor"
+import { TilesetWorkspaceColumn } from "./components/editor/tileset-workspace-column"
 import type {
   BrushTransformState,
-  ImageBounds,
   TilesetLoadSource,
 } from "@/types/editor"
 import {
   DEFAULT_BRUSH_TRANSFORM,
-  clamp,
-  getBoundsFromTiles,
   getBrushTransformSummary,
   getDocumentConfigFromMap,
-  getMimeTypeFromPath,
   getTilesetKey,
   isPositiveInteger,
   resetBrushTransform,
@@ -41,16 +33,12 @@ import {
   rotateBrushCounterClockwise,
   toggleBrushHorizontalFlip,
   toggleBrushVerticalFlip,
-  transformBrushGid,
   transformStamp,
+  joinPath,
 } from "./components/editor/utils"
 import { useLeaferEngine } from "./hooks/use-leafer-engine"
 
-async function createObjectUrlFromPath(path: string) {
-  const bytes = await readFile(path)
-  const blob = new Blob([bytes], { type: getMimeTypeFromPath(path) })
-  return URL.createObjectURL(blob)
-}
+// 移除 createObjectUrlFromPath 辅助函数，改为直接使用 convertFileSrc
 
 export default function App() {
   const [documentConfig, setDocumentConfig] =
@@ -58,24 +46,20 @@ export default function App() {
   const [draftConfig, setDraftConfig] = useState<GridConfig>(config.document)
   const [mapPath, setMapPath] = useState("")
   const [activeTilesetKey, setActiveTilesetKey] = useState("")
-  const [activeGid, setActiveGid] = useState(1)
   const [selectedTileGids, setSelectedTileGids] = useState<number[]>([])
   const [selectedStamp, setSelectedStamp] = useState<TilesetStamp | null>(null)
   const [brushTransform, setBrushTransform] = useState<BrushTransformState>(
     DEFAULT_BRUSH_TRANSFORM
   )
-  const [tilesetZoom, setTilesetZoom] = useState(100)
-  const [tilesetFilter, setTilesetFilter] = useState("")
+
+
   const [loadingTileset, setLoadingTileset] = useState(false)
   const [loadingMapIO, setLoadingMapIO] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
-  const [dragSelectionBounds, setDragSelectionBounds] =
-    useState<ImageBounds | null>(null)
   const [pendingImportedMap, setPendingImportedMap] = useState<TiledMap | null>(null)
 
-  const blobUrlsRef = useRef<Map<string, string>>(new Map())
-  const tilesetImageRef = useRef<HTMLImageElement | null>(null)
-  const dragStartPointRef = useRef<{ x: number; y: number } | null>(null)
+  // blobUrlsRef 已移除，因为改用 convertFileSrc 直接加载本地资源
+  // tilesetImageRef 用不到了，现在 TilesetPreviewColumn 内部由 Leafer 接管
 
   const transformedStamp = useMemo(
     () => transformStamp(selectedStamp, brushTransform),
@@ -120,25 +104,7 @@ export default function App() {
     )
   }, [activeTilesetKey, tilesets])
 
-  const selectedTileSet = useMemo(
-    () => new Set(selectedTileGids),
-    [selectedTileGids]
-  )
 
-  const selectedTile = useMemo(
-    () => activeTileset?.getTileDescriptor(activeGid) ?? null,
-    [activeGid, activeTileset]
-  )
-
-  const selectedTilesBounds = useMemo(() => {
-    if (!activeTileset || !selectedTileGids.length) return null
-
-    const tiles = selectedTileGids
-      .map((gid) => activeTileset.getTileDescriptor(gid))
-      .filter((tile): tile is TilesetTileDescriptor => tile !== null)
-
-    return getBoundsFromTiles(tiles)
-  }, [activeTileset, selectedTileGids])
 
   useEffect(() => {
     if (!activeTileset || !selectedTileGids.length) {
@@ -165,85 +131,15 @@ export default function App() {
     [brushTransform]
   )
 
-  const previewSelectionBounds = dragSelectionBounds ?? selectedTilesBounds
 
-  const previewSelectionStyle = useMemo(() => {
-    if (!activeTileset || !previewSelectionBounds) return undefined
 
-    return {
-      left: `${(previewSelectionBounds.x / activeTileset.imageWidth) * 100}%`,
-      top: `${(previewSelectionBounds.y / activeTileset.imageHeight) * 100}%`,
-      width: `${(previewSelectionBounds.width / activeTileset.imageWidth) * 100}%`,
-      height: `${(previewSelectionBounds.height / activeTileset.imageHeight) * 100}%`,
-    }
-  }, [activeTileset, previewSelectionBounds])
-
-  const tileButtons = useMemo(() => {
-    if (!activeTileset) return []
-
-    const query = tilesetFilter.trim().toLowerCase()
-    const allTiles = activeTileset.listTiles()
-    if (!query) return allTiles
-
-    return allTiles.filter((tile) => {
-      const tokens = [
-        String(tile.gid),
-        String(tile.localId),
-        String(tile.column + 1),
-        String(tile.row + 1),
-      ]
-
-      return tokens.some((token) => token.includes(query))
-    })
-  }, [activeTileset, tilesetFilter])
-
-  const transformedStampSize = transformedStamp
-    ? `${transformedStamp.width} x ${transformedStamp.height}`
-    : "0 x 0"
-
-  const selectionLabel = transformedStamp
-    ? `${transformedStamp.width} x ${transformedStamp.height} Stamp`
-    : selectedTileGids.length
-      ? `${selectedTileGids.length} Tiles`
-      : "No Selection"
-
-  const selectionHint = dragSelectionBounds
-    ? "拖动中，松开后会更新当前 stamp。"
-    : selectedTileGids.length
-      ? `已选 ${selectedTileGids.length} 个 tile，当前变换: ${brushSummary}`
-      : "单击选择单个 tile，拖动可以框选一整块区域。"
-
-  const activeTilesetPreviewUrl = activeTileset?.image ?? ""
   const activeTilesetSourcePath = activeTileset?.sourcePath ?? activeTileset?.name ?? ""
 
-  const stampPreviewGrid = useMemo(() => {
-    if (!transformedStamp || !activeTileset) return null
 
-    const cells = Array.from(
-      { length: transformedStamp.width * transformedStamp.height },
-      () => null as { key: string; gid: number; url: string | null } | null
-    )
-
-    transformedStamp.cells.forEach((cell, index) => {
-      const gridIndex = cell.offsetY * transformedStamp.width + cell.offsetX
-      cells[gridIndex] = {
-        key: `${index}-${cell.offsetX}-${cell.offsetY}-${cell.gid}`,
-        gid: cell.gid,
-        url: activeTileset.getTileImageUrl(cell.gid),
-      }
-    })
-
-    return {
-      width: transformedStamp.width,
-      height: transformedStamp.height,
-      cells,
-    }
-  }, [activeTileset, transformedStamp])
 
   const selectTiles = useCallback((gids: number[]) => {
     const next = Array.from(new Set(gids)).filter((gid) => gid > 0)
     setSelectedTileGids(next)
-    setActiveGid(next[0] ?? 0)
   }, [])
 
   const handleDraftChange = useCallback(
@@ -276,31 +172,13 @@ export default function App() {
     setBrushTransform(resetBrushTransform())
   }, [])
 
-  const getTilePreviewUrl = useCallback(
-    (gid: number) => {
-      if (!activeTileset) return null
-      return activeTileset.getTileImageUrl(transformBrushGid(gid, brushTransform))
-    },
-    [activeTileset, brushTransform]
-  )
-
-  const getOrCreateObjectUrl = useCallback(async (path: string) => {
-    const cached = blobUrlsRef.current.get(path)
-    if (cached) return cached
-
-    const objectUrl = await createObjectUrlFromPath(path)
-    blobUrlsRef.current.set(path, objectUrl)
-    return objectUrl
-  }, [])
-
   const createTilesetsFromSources = useCallback(
     async (sources: TilesetLoadSource[]) => {
       return Promise.all(
         sources.map(async (source) => {
-          const imageUrl = await getOrCreateObjectUrl(source.path)
           return Tileset.fromUrl({
             name: source.name,
-            image: imageUrl,
+            image: source.path,
             sourcePath: source.path,
             firstGid: source.firstGid ?? 1,
             tileWidth: source.tileWidth,
@@ -311,7 +189,7 @@ export default function App() {
         })
       )
     },
-    [getOrCreateObjectUrl]
+    []
   )
 
   const applyLoadedTilesets = useCallback(
@@ -334,44 +212,10 @@ export default function App() {
     setActiveTilesetKey("")
     setSelectedTileGids([])
     setSelectedStamp(null)
-    setActiveGid(0)
+
   }, [setTilesets])
 
-  const getPreviewPoint = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (!activeTileset || !tilesetImageRef.current) return null
 
-      const rect = tilesetImageRef.current.getBoundingClientRect()
-      if (!rect.width || !rect.height) return null
-
-      const localX = clamp(event.clientX - rect.left, 0, rect.width)
-      const localY = clamp(event.clientY - rect.top, 0, rect.height)
-
-      return {
-        x: (localX / rect.width) * activeTileset.imageWidth,
-        y: (localY / rect.height) * activeTileset.imageHeight,
-      }
-    },
-    [activeTileset]
-  )
-
-  const getSelectionTiles = useCallback(
-    (start: { x: number; y: number }, end: { x: number; y: number }) => {
-      if (!activeTileset) return []
-
-      const tiles = activeTileset.getTilesInImageBounds(
-        start.x,
-        start.y,
-        end.x,
-        end.y
-      )
-      if (tiles.length) return tiles
-
-      const single = activeTileset.getTileAtImagePoint(end.x, end.y)
-      return single ? [single] : []
-    },
-    [activeTileset]
-  )
 
   const handleLoadTilesets = useCallback(async () => {
     const fileSelection = await open({
@@ -399,13 +243,12 @@ export default function App() {
       let firstImportedKey = ""
 
       for (const [index, path] of files.entries()) {
-        const imageUrl = await getOrCreateObjectUrl(path)
         const nextTileset = await Tileset.fromUrl({
           name:
             files.length === 1 && !tilesets.length
               ? "Working Tileset"
               : `Tileset ${tilesets.length + index + 1}`,
-          image: imageUrl,
+          image: path,
           sourcePath: path,
           firstGid: nextFirstGid,
           tileWidth: documentConfig.cellSize,
@@ -430,7 +273,6 @@ export default function App() {
   }, [
     applyLoadedTilesets,
     documentConfig.cellSize,
-    getOrCreateObjectUrl,
     tilesets,
   ])
 
@@ -505,34 +347,73 @@ export default function App() {
       setLoadingMapIO(true)
       setErrorMessage("")
 
-      const map = exportTiledMap()
-      if (!map) {
+      const draft = exportTiledMap()
+      if (!draft) {
         setErrorMessage("当前没有可导出的地图数据")
         return
       }
 
-      const filePath = await save({
-        defaultPath: mapPath || "tilemap.tmj",
-        filters: [
-          {
-            name: "Tiled Map",
-            extensions: ["tmj", "json"],
-          },
-        ],
+      const selectedDir = await open({
+        directory: true,
+        multiple: false,
+        title: "选择项目导出的目标文件夹",
       })
 
-      if (!filePath) return
+      if (!selectedDir || Array.isArray(selectedDir)) return
 
-      await writeTextFile(filePath, JSON.stringify(map, null, 2))
-      setMapPath(filePath)
+      // 以用户选择的文件夹直接作为项目根目录
+      const projectDir = selectedDir
+      const projectName = projectDir.split(/[\\/]/).pop() || "map"
+
+      const targetMapPath = joinPath(projectDir, `${projectName}.tmj`)
+      const assetsDir = joinPath(projectDir, "assets")
+      const tilesetsDir = joinPath(assetsDir, "tilesets")
+
+      // 显式逐级创建目录，防止静默失败
+      try { await mkdir(projectDir, { recursive: true }) } catch (e) { alert(`创建目录失败: projectDir - ${String(e)}`) }
+      try { await mkdir(assetsDir, { recursive: true }) } catch (e) { alert(`创建目录失败: assetsDir - ${String(e)}`) }
+      try { await mkdir(tilesetsDir, { recursive: true }) } catch (e) { alert(`创建目录失败: tilesetsDir - ${String(e)}`) }
+
+      // 复制图集文件并准备引用
+      const tilesetRefs = []
+
+      for (const ts of tilesets) {
+        let finalImageRelative = ts.image
+
+        if (ts.sourcePath) {
+          const filename = ts.sourcePath.split(/[\\/]/).pop() || "tileset.png"
+          const targetPath = joinPath(tilesetsDir, filename)
+
+          try {
+            const bytes = await readFile(ts.sourcePath)
+            await writeFile(targetPath, bytes)
+            finalImageRelative = `assets/tilesets/${filename}`
+          } catch (e) {
+            console.error("Failed to copy tileset image:", e)
+            alert(`无法保存图片 ${filename}：${String(e)}`)
+          }
+        }
+
+        const ref = ts.toTiledTilesetRef()
+        ref.image = finalImageRelative
+        tilesetRefs.push(ref)
+      }
+
+      const map = exportTiledMap({
+        tilesets: tilesetRefs,
+      })
+
+      if (!map) return
+
+      await writeTextFile(targetMapPath, JSON.stringify(map, null, 2))
+      setMapPath(targetMapPath)
       markSaved()
     } catch (error) {
-      console.log(error)
       setErrorMessage(error instanceof Error ? error.message : "导出地图失败")
     } finally {
       setLoadingMapIO(false)
     }
-  }, [exportTiledMap, mapPath, markSaved])
+  }, [exportTiledMap, mapPath, markSaved, tilesets])
 
   const handleImportMap = useCallback(async () => {
     if (isDirty && !window.confirm("当前有未保存修改，导入地图会覆盖当前状态，是否继续？")) {
@@ -643,60 +524,6 @@ export default function App() {
     }
   }, [isDirty])
 
-  const handleTilesetPreviewPointerDown = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (event.button !== 0 || !activeTileset) return
-
-      const point = getPreviewPoint(event)
-      if (!point) return
-
-      dragStartPointRef.current = point
-      const selectedTiles = getSelectionTiles(point, point)
-      setDragSelectionBounds(getBoundsFromTiles(selectedTiles))
-      event.currentTarget.setPointerCapture(event.pointerId)
-      event.preventDefault()
-    },
-    [activeTileset, getPreviewPoint, getSelectionTiles]
-  )
-
-  const handleTilesetPreviewPointerMove = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      const startPoint = dragStartPointRef.current
-      if (!startPoint) return
-
-      const point = getPreviewPoint(event)
-      if (!point) return
-
-      const selectedTiles = getSelectionTiles(startPoint, point)
-      setDragSelectionBounds(getBoundsFromTiles(selectedTiles))
-      event.preventDefault()
-    },
-    [getPreviewPoint, getSelectionTiles]
-  )
-
-  const finishTilesetPreviewSelection = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      const startPoint = dragStartPointRef.current
-      dragStartPointRef.current = null
-
-      if (!startPoint) return
-
-      const point = getPreviewPoint(event)
-      if (!point) {
-        setDragSelectionBounds(null)
-        return
-      }
-
-      const selectedTiles = getSelectionTiles(startPoint, point)
-      setDragSelectionBounds(null)
-      selectTiles(selectedTiles.map((tile) => tile.gid))
-
-      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-        event.currentTarget.releasePointerCapture(event.pointerId)
-      }
-    },
-    [getPreviewPoint, getSelectionTiles, selectTiles]
-  )
 
   const handleSelectTileset = useCallback(
     (key: string) => {
@@ -708,12 +535,8 @@ export default function App() {
   )
 
   useEffect(() => {
-    const blobUrls = blobUrlsRef
-
-    return () => {
-      blobUrls.current.forEach((objectUrl) => URL.revokeObjectURL(objectUrl))
-      blobUrls.current.clear()
-    }
+    // URL 缓存清理逻辑已移除，因为不再使用 Blob URL
+    return () => {}
   }, [])
 
   return (
@@ -774,48 +597,17 @@ export default function App() {
         </div>
 
         <div className="flex w-[320px] shrink-0 flex-col gap-4 overflow-y-auto pr-1">
-          <TilesetLibraryColumn
+          <TilesetWorkspaceColumn
             tilesets={tilesets}
             activeTileset={activeTileset}
             loadingTileset={loadingTileset}
-            filter={tilesetFilter}
             onLoadTileset={handleLoadTilesets}
             onSelectTileset={handleSelectTileset}
-            onFilterChange={setTilesetFilter}
             getTilesetKey={getTilesetKey}
-          />
-        </div>
-
-        <div className="flex w-[360px] shrink-0 flex-col gap-4 overflow-y-auto pr-1">
-          <TilesetPreviewColumn
-            activeTileset={activeTileset}
-            previewUrl={activeTilesetPreviewUrl}
             sourcePath={activeTilesetSourcePath}
-            selectionStyle={previewSelectionStyle}
-            selectionLabel={selectionLabel}
-            selectionHint={selectionHint}
-            zoom={tilesetZoom}
-            onZoomChange={setTilesetZoom}
-            imageRef={tilesetImageRef}
-            onPointerDown={handleTilesetPreviewPointerDown}
-            onPointerMove={handleTilesetPreviewPointerMove}
-            onPointerUp={finishTilesetPreviewSelection}
-            onPointerCancel={finishTilesetPreviewSelection}
-          />
-        </div>
-
-        <div className="flex w-[380px] shrink-0 flex-col gap-4 overflow-y-auto pr-1">
-          <BrushWorkspaceColumn
-            selectedTile={selectedTile}
             selectedTileGids={selectedTileGids}
-            transformedStampSize={transformedStampSize}
+            onSelectTiles={selectTiles}
             brushSummary={brushSummary}
-            tileButtons={tileButtons}
-            selectedTileSet={selectedTileSet}
-            activeGid={activeGid}
-            stampPreviewGrid={stampPreviewGrid}
-            getTilePreviewUrl={getTilePreviewUrl}
-            onSelectTile={(gid) => selectTiles([gid])}
             onClearActiveLayer={clearActiveLayer}
             onRotateCW={handleRotateBrushClockwise}
             onRotateCCW={handleRotateBrushCounterClockwise}
@@ -823,7 +615,9 @@ export default function App() {
             onFlipY={handleToggleBrushFlipY}
             onResetTransform={handleResetBrushTransform}
           />
+        </div>
 
+        <div className="flex w-[320px] shrink-0 flex-col gap-4 overflow-y-auto pr-1">
           <LayersColumn
             layers={layers}
             activeLayerId={activeLayerId}

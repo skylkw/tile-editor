@@ -17,6 +17,8 @@ export interface TiledTilesetRef {
   source?: string
   name?: string
   image?: string
+  imagewidth?: number
+  imageheight?: number
   tilewidth?: number
   tileheight?: number
   tilecount?: number

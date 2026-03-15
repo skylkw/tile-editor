@@ -198,16 +198,51 @@ export function joinPath(baseDir: string, relativePath: string) {
   return `${normalizedBase}${separator}${normalizedRelative}`
 }
 
+export function normalizePath(path: string) {
+  return path.replace(/[\\/]+/g, "/")
+}
+
+export function getRelativePath(from: string, to: string) {
+  const normalizedFrom = normalizePath(from)
+  const normalizedTo = normalizePath(to)
+
+  const fromParts = normalizedFrom.split("/")
+  const toParts = normalizedTo.split("/")
+
+  // If 'from' is a file, remove its filename to get the directory
+  fromParts.pop()
+
+  let i = 0
+  while (
+    i < fromParts.length &&
+    i < toParts.length &&
+    fromParts[i].toLowerCase() === toParts[i].toLowerCase()
+  ) {
+    i++
+  }
+
+  const upCount = fromParts.length - i
+  const relativeParts = []
+  for (let j = 0; j < upCount; j++) {
+    relativeParts.push("..")
+  }
+  for (let j = i; j < toParts.length; j++) {
+    relativeParts.push(toParts[j])
+  }
+
+  return relativeParts.join("/") || "."
+}
+
 export function resolveTilesetSourcePath(
   mapPath: string,
   tilesetRef: TiledTilesetRef | undefined
 ) {
   const candidate = tilesetRef?.image ?? tilesetRef?.source
   if (!candidate) return ""
-  if (isAbsoluteLocalPath(candidate)) return candidate
+  if (isAbsoluteLocalPath(candidate)) return normalizePath(candidate)
 
   const mapDir = getDirectoryPath(mapPath)
-  return joinPath(mapDir, candidate)
+  return normalizePath(joinPath(mapDir, candidate))
 }
 
 export function getDocumentConfigFromMap(map: TiledMap): GridConfig | null {

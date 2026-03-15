@@ -563,6 +563,7 @@ export function useLeaferEngine(config: UseLeaferEngineConfig) {
       tilesets?: TiledTilesetRef[]
       infinite?: boolean
       orientation?: TiledMap["orientation"]
+      mapPath?: string
     }): TiledMap | null => {
       const tileLayers = exportTiledTileLayers()
       if (!tileLayers.length) return null
@@ -570,7 +571,9 @@ export function useLeaferEngine(config: UseLeaferEngineConfig) {
       const metrics = engineRef.current?.getGrid() ?? resolvedDocument
       const tilesets =
         config?.tilesets ??
-        tilesetsRef.current.map((tileset) => tileset.toTiledTilesetRef())
+        tilesetsRef.current.map((tileset) =>
+          tileset.toTiledTilesetRef({ mapPath: config?.mapPath })
+        )
 
       return buildTiledMap({
         tilewidth: metrics.cellSize,

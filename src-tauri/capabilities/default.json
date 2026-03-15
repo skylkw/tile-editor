@@ -10,10 +10,12 @@
     "fs:default",
     "fs:read-all",
     "fs:write-all",
-    "fs:allow-write-text-file",
-    "fs:allow-read-text-file",
-    "fs:allow-read-file",
-    "fs:allow-write-file",
+    {
+      "identifier": "fs:scope",
+      "allow": [{ "path": "**" }]
+    },
+    "fs:allow-mkdir",
+    "fs:allow-copy-file",
     "dialog:default"
   ]
 }
