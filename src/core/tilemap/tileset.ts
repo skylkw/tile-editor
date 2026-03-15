@@ -1,7 +1,7 @@
 import type { TiledTilesetRef } from "@/types/tiled"
 import { clearTiledGidFlags, decodeTiledGid } from "./tiled-gid"
 
-export interface TilesetOptions {
+export interface TilesetConfig {
   name: string
   image: string
   sourcePath?: string
@@ -79,15 +79,15 @@ export class Tileset {
   private readonly tiles: TilesetTileDescriptor[]
   private readonly tileUrlCache = new Map<number, string>()
 
-  private constructor(options: TilesetOptions, imageElement: HTMLImageElement) {
-    this.name = options.name
-    this.image = options.image
-    this.sourcePath = options.sourcePath
-    this.tileWidth = requirePositiveInteger("tileWidth", options.tileWidth)
-    this.tileHeight = requirePositiveInteger("tileHeight", options.tileHeight)
-    this.margin = options.margin ?? 0
-    this.spacing = options.spacing ?? 0
-    this.firstGid = options.firstGid ?? 1
+  private constructor(config: TilesetConfig, imageElement: HTMLImageElement) {
+    this.name = config.name
+    this.image = config.image
+    this.sourcePath = config.sourcePath
+    this.tileWidth = requirePositiveInteger("tileWidth", config.tileWidth)
+    this.tileHeight = requirePositiveInteger("tileHeight", config.tileHeight)
+    this.margin = config.margin ?? 0
+    this.spacing = config.spacing ?? 0
+    this.firstGid = config.firstGid ?? 1
     this.imageElement = imageElement
     this.imageWidth = imageElement.width
     this.imageHeight = imageElement.height
@@ -131,9 +131,9 @@ export class Tileset {
     })
   }
 
-  public static async fromUrl(options: TilesetOptions) {
-    const imageElement = await loadImage(options.image)
-    return new Tileset(options, imageElement)
+  public static async fromUrl(config: TilesetConfig) {
+    const imageElement = await loadImage(config.image)
+    return new Tileset(config, imageElement)
   }
 
   public listTiles() {

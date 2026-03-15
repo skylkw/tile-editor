@@ -4,7 +4,7 @@ import type {
   TiledTilesetRef,
 } from "@/types/tiled"
 
-export type TiledMapBuildOptions = {
+export type TiledMapBuildConfig = {
   tilewidth: number
   tileheight: number
   orientation?: TiledMap["orientation"]
@@ -21,20 +21,20 @@ export type LayerCell = {
   rawGid: number
 }
 
-export function buildTiledMap(options: TiledMapBuildOptions): TiledMap {
+export function buildTiledMap(config: TiledMapBuildConfig): TiledMap {
   return {
     type: "map",
     version: "1.10",
     tiledversion: "1.10",
-    orientation: options.orientation ?? "orthogonal",
+    orientation: config.orientation ?? "orthogonal",
     renderorder: "right-down",
-    infinite: options.infinite ?? false,
-    width: options.width,
-    height: options.height,
-    tilewidth: options.tilewidth,
-    tileheight: options.tileheight,
-    layers: options.layers,
-    tilesets: options.tilesets ?? [],
+    infinite: config.infinite ?? false,
+    width: config.width,
+    height: config.height,
+    tilewidth: config.tilewidth,
+    tileheight: config.tileheight,
+    layers: config.layers,
+    tilesets: config.tilesets ?? [],
   }
 }
 

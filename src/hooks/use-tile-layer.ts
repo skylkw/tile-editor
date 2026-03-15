@@ -90,7 +90,7 @@ export function useTileLayer(engineRef: RefObject<LeaferEngine | null>) {
   )
 
   const exportTiledMap = useCallback(
-    (options?: {
+    (config?: {
       layerName?: string
       tilesets?: TiledTilesetRef[]
       infinite?: boolean
@@ -100,17 +100,17 @@ export function useTileLayer(engineRef: RefObject<LeaferEngine | null>) {
       const engine = engineRef.current
       if (!layer || !engine) return null
 
-      const tileLayer = layer.exportTiledTileLayer(options?.layerName)
+      const tileLayer = layer.exportTiledTileLayer(config?.layerName)
       const metrics = engine.getGrid()
 
       return buildTiledMap({
         tilewidth: metrics.cellSize,
         tileheight: metrics.cellSize,
-        infinite: options?.infinite ?? false,
+        infinite: config?.infinite ?? false,
         width: metrics.cols,
         height: metrics.rows,
-        orientation: options?.orientation ?? "orthogonal",
-        tilesets: options?.tilesets ?? [],
+        orientation: config?.orientation ?? "orthogonal",
+        tilesets: config?.tilesets ?? [],
         layers: [tileLayer],
       })
     },

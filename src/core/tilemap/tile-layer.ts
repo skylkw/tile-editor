@@ -8,7 +8,7 @@ import type { Tileset } from "./tileset"
 
 type TileNode = Image | Rect
 
-export interface TileLayerOptions {
+export interface TileLayerConfig {
   id?: string
   name?: string
   visible?: boolean
@@ -32,14 +32,14 @@ export class TileLayer {
   private order: number
   private readonly tiles = new Map<number, TileNode>()
 
-  constructor(engine: LeaferEngine, options: TileLayerOptions = {}) {
-    this.id = options.id ?? `layer-${Date.now()}`
+  constructor(engine: LeaferEngine, config: TileLayerConfig = {}) {
+    this.id = config.id ?? `layer-${Date.now()}`
     this.engine = engine
     this.metrics = engine.getGrid()
     this.tileData = new Uint32Array(this.metrics.cols * this.metrics.rows)
-    this.name = options.name ?? "Tile Layer"
-    this.visible = options.visible ?? true
-    this.order = options.order ?? 0
+    this.name = config.name ?? "Tile Layer"
+    this.visible = config.visible ?? true
+    this.order = config.order ?? 0
     this.layerGroup = new Group({ visible: this.visible, zIndex: this.order })
     this.engine.getContentLayer().add(this.layerGroup)
   }
@@ -199,7 +199,7 @@ export class TileLayer {
 
   public importTiledTileLayer(
     layer: TiledTileLayer,
-    options?: {
+    config?: {
       mapWidth?: number
       mapHeight?: number
     }
@@ -208,8 +208,8 @@ export class TileLayer {
 
     const cells = readTileLayerCells(
       layer,
-      options?.mapWidth,
-      options?.mapHeight
+      config?.mapWidth,
+      config?.mapHeight
     )
 
     for (const cell of cells) {

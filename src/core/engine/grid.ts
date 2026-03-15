@@ -6,12 +6,7 @@ import type {
   WorldPoint,
 } from "@/types/engine"
 
-/**
- * 将网格坐标转换为唯一字符串标识符，常用于 Map 索引。
- */
-export function keyByCell(cellX: number, cellY: number) {
-  return `${cellX},${cellY}`
-}
+
 
 /**
  * 世界坐标 (连续值) 转换为网格坐标 (离散单元索引)。
@@ -38,17 +33,6 @@ export function cellToWorld(
   }
 }
 
-/**
- * 将任意世界坐标“吸附”到最近的网格单元左上角。
- */
-export function snapWorldPosition(
-  x: number,
-  y: number,
-  cellSize: number
-): WorldPoint {
-  const { cellX, cellY } = worldToCell(x, y, cellSize)
-  return cellToWorld(cellX, cellY, cellSize)
-}
 
 /**
  * GridRenderer - 网格背景与线条绘制器。
@@ -71,9 +55,9 @@ export class GridRenderer {
   /**
    * 执行渲染逻辑：先清理旧节点，再根据 specifications 循环创建网格线
    * 
-   * @param options 网格配置项
+   * @param config 网格配置项
    */
-  public render(options: GridConfig) {
+  public render(config: GridConfig) {
     this.clear()
 
     const {
@@ -88,7 +72,7 @@ export class GridRenderer {
       lineThickness,
       majorLineThickness,
       borderThickness,
-    } = options
+    } = config
 
     const width = cols * cellSize
     const height = rows * cellSize

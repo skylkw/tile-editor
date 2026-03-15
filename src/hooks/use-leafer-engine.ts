@@ -1,4 +1,9 @@
+import globalConfig from "@/config.json"
 import { createLeaferEngine, LeaferEngine } from "@/core/engine/leafer-engine"
+import { buildTiledMap } from "@/core/io/tiled-map"
+import { TileLayer } from "@/core/tilemap/tile-layer"
+import { clearTiledGidFlags } from "@/core/tilemap/tiled-gid"
+import type { Tileset, TilesetStamp } from "@/core/tilemap/tileset"
 import type {
   CameraState,
   GridCell,
@@ -6,18 +11,13 @@ import type {
   GridMetrics,
   ViewportConfig,
 } from "@/types/engine"
-import { buildTiledMap } from "@/core/io/tiled-map"
-import { TileLayer } from "@/core/tilemap/tile-layer"
-import { clearTiledGidFlags } from "@/core/tilemap/tiled-gid"
 import type {
   TiledMap,
   TiledTileLayer,
   TiledTilesetRef,
 } from "@/types/tiled"
-import type { Tileset, TilesetStamp } from "@/core/tilemap/tileset"
 import { Group, Image, Rect } from "leafer-ui"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import config from "@/config.json"
 
 export interface UseLeaferEngineConfig {
   document: GridConfig
@@ -40,7 +40,7 @@ type StampPreviewNode = Image | Rect
 function createDefaultLayerState(index = 1): EditorLayerState {
   return {
     id: `layer-${index}`,
-    name: `${config.layer.defaultNamePrefix}${index}`,
+    name: `${globalConfig.layer.defaultNamePrefix}${index}`,
     visible: true,
   }
 }
@@ -64,8 +64,8 @@ function isTiledTileLayer(layer: TiledMap["layers"][number]): layer is TiledTile
   )
 }
 
-export function useLeaferEngine(options: UseLeaferEngineConfig) {
-  const { document, viewport, initialCamera, activeStamp } = options
+export function useLeaferEngine(config: UseLeaferEngineConfig) {
+  const { document, viewport, initialCamera, activeStamp } = config
 
   const initialLayerState = useMemo(() => createDefaultLayerState(), [])
   const initialLayers = useMemo(() => [initialLayerState], [initialLayerState])
@@ -95,7 +95,7 @@ export function useLeaferEngine(options: UseLeaferEngineConfig) {
 
   const resolvedDocument = useMemo(() => {
     const base = {
-      ...config.document,
+      ...globalConfig.document,
       ...document,
     }
     return {
@@ -117,8 +117,8 @@ export function useLeaferEngine(options: UseLeaferEngineConfig) {
   const isDirty = revision !== savedRevision
 
   useEffect(() => {
-    activeStampRef.current = options.activeStamp ?? null
-  }, [options.activeStamp])
+    activeStampRef.current = config.activeStamp ?? null
+  }, [config.activeStamp])
 
   const updateHoverCell = useCallback((nextCell: GridCell | null) => {
     const currentCell = hoverCellRef.current
@@ -376,7 +376,7 @@ export function useLeaferEngine(options: UseLeaferEngineConfig) {
   useEffect(() => {
     syncStampPreviewNodes()
     syncStampPreviewPosition()
-  }, [options.activeStamp, syncStampPreviewNodes, syncStampPreviewPosition, tilesets])
+  }, [config.activeStamp, syncStampPreviewNodes, syncStampPreviewPosition, tilesets])
 
   const setStampPreviewBlocked = useCallback((blocked: boolean) => {
     const previewGroup = stampPreviewGroupRef.current
@@ -558,7 +558,7 @@ export function useLeaferEngine(options: UseLeaferEngineConfig) {
   }, [getLayer])
 
   const exportTiledMap = useCallback(
-    (options?: {
+    (config?: {
       tilesets?: TiledTilesetRef[]
       infinite?: boolean
       orientation?: TiledMap["orientation"]
@@ -568,16 +568,16 @@ export function useLeaferEngine(options: UseLeaferEngineConfig) {
 
       const metrics = engineRef.current?.getGrid() ?? resolvedDocument
       const tilesets =
-        options?.tilesets ??
+        config?.tilesets ??
         tilesetsRef.current.map((tileset) => tileset.toTiledTilesetRef())
 
       return buildTiledMap({
         tilewidth: metrics.cellSize,
         tileheight: metrics.cellSize,
-        infinite: options?.infinite ?? false,
+        infinite: config?.infinite ?? false,
         width: metrics.cols,
         height: metrics.rows,
-        orientation: options?.orientation ?? "orthogonal",
+        orientation: config?.orientation ?? "orthogonal",
         tilesets,
         layers: tileLayers,
       })
@@ -642,10 +642,10 @@ export function useLeaferEngine(options: UseLeaferEngineConfig) {
 
     const hoverOutline = new Rect({
       visible: false,
-      fill: config.theme.hoverOutline.fill,
-      stroke: config.theme.hoverOutline.stroke,
-      strokeWidth: config.theme.hoverOutline.strokeWidth,
-      cornerRadius: config.theme.hoverOutline.cornerRadius,
+      fill: globalConfig.theme.hoverOutline.fill,
+      stroke: globalConfig.theme.hoverOutline.stroke,
+      strokeWidth: globalConfig.theme.hoverOutline.strokeWidth,
+      cornerRadius: globalConfig.theme.hoverOutline.cornerRadius,
       hitChildren: false,
     })
     const stampPreviewTint = new Rect({
@@ -654,8 +654,8 @@ export function useLeaferEngine(options: UseLeaferEngineConfig) {
       y: 0,
       width: 0,
       height: 0,
-      fill: config.theme.stampPreviewTint.fill,
-      cornerRadius: config.theme.stampPreviewTint.cornerRadius,
+      fill: globalConfig.theme.stampPreviewTint.fill,
+      cornerRadius: globalConfig.theme.stampPreviewTint.cornerRadius,
       hitChildren: false,
     })
     const stampPreviewGroup = new Group({
@@ -773,13 +773,13 @@ export function useLeaferEngine(options: UseLeaferEngineConfig) {
     const handlePointerDown = (event: PointerEvent) => {
       const point = getScreenPoint(event)
 
-      if (event.button === config.shortcuts.panButton || (event.button === config.shortcuts.paintButton && spacePressedRef.current)) {
+      if (event.button === globalConfig.shortcuts.panButton || (event.button === globalConfig.shortcuts.paintButton && spacePressedRef.current)) {
         return // Let Leafer handle pan
-      } else if (event.button === config.shortcuts.eraseButton) {
+      } else if (event.button === globalConfig.shortcuts.eraseButton) {
         interactionMode = "erase"
         strokeOccupiedKeys = new Set()
         paintAt("erase", point.x, point.y)
-      } else if (event.button === config.shortcuts.paintButton) {
+      } else if (event.button === globalConfig.shortcuts.paintButton) {
         interactionMode = "paint"
         strokeOccupiedKeys = new Set()
         paintAt("paint", point.x, point.y)
@@ -826,14 +826,14 @@ export function useLeaferEngine(options: UseLeaferEngineConfig) {
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.code !== config.shortcuts.panKey) return
+      if (event.code !== globalConfig.shortcuts.panKey) return
       if (isTextInputTarget(event.target)) return
       spacePressedRef.current = true
       event.preventDefault()
     }
 
     const handleKeyUp = (event: KeyboardEvent) => {
-      if (event.code !== config.shortcuts.panKey) return
+      if (event.code !== globalConfig.shortcuts.panKey) return
       spacePressedRef.current = false
       if (interactionMode === "pan") {
         interactionMode = "idle"
