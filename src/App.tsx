@@ -302,11 +302,11 @@ export default function App() {
             name: source.name,
             image: imageUrl,
             sourcePath: source.path,
-            firstGid: source.firstGid,
+            firstGid: source.firstGid ?? 1,
             tileWidth: source.tileWidth,
             tileHeight: source.tileHeight,
-            spacing: source.spacing,
-            margin: source.margin,
+            spacing: source.spacing ?? 0,
+            margin: source.margin ?? 0,
           })
         })
       )
@@ -410,6 +410,8 @@ export default function App() {
           firstGid: nextFirstGid,
           tileWidth: documentConfig.cellSize,
           tileHeight: documentConfig.cellSize,
+          margin: 0,
+          spacing: 0,
         })
 
         nextTilesets.push(nextTileset)
@@ -525,6 +527,7 @@ export default function App() {
       setMapPath(filePath)
       markSaved()
     } catch (error) {
+      console.log(error)
       setErrorMessage(error instanceof Error ? error.message : "导出地图失败")
     } finally {
       setLoadingMapIO(false)

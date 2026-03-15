@@ -23,9 +23,9 @@ export interface TilesetConfig {
   sourcePath?: string
   tileWidth: number
   tileHeight: number
-  margin?: number
-  spacing?: number
-  firstGid?: number
+  margin: number
+  spacing: number
+  firstGid: number
 }
 
 /** 图集中单个瓦片的元数据 */
@@ -57,8 +57,8 @@ export interface TilesetStamp {
 
 /** 图层 (TileLayer) 初始化配置 */
 export interface TileLayerConfig {
-  id?: string
-  name?: string
-  visible?: boolean
-  order?: number
+  id: string
+  name: string
+  visible: boolean
+  order: number
 }

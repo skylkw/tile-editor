@@ -33,14 +33,14 @@ export class TileLayer {
   private order: number                     // 层级顺序 (zIndex)
   private readonly tiles = new Map<number, TileNode>() // 索引到渲染节点的映射
 
-  constructor(engine: LeaferEngine, config: TileLayerConfig = {}) {
-    this.id = config.id ?? `layer-${Date.now()}`
+  constructor(engine: LeaferEngine, config: TileLayerConfig) {
+    this.id = config.id
+    this.name = config.name
+    this.visible = config.visible
+    this.order = config.order
     this.engine = engine
     this.metrics = engine.getGrid()
     this.tileData = new Uint32Array(this.metrics.cols * this.metrics.rows)
-    this.name = config.name ?? "Tile Layer"
-    this.visible = config.visible ?? true
-    this.order = config.order ?? 0
     
     // 初始化渲染组，并挂载到引擎的内容层
     this.layerGroup = new Group({ visible: this.visible, zIndex: this.order })

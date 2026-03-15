@@ -64,9 +64,9 @@ export class Tileset {
     this.sourcePath = config.sourcePath
     this.tileWidth = requirePositiveInteger("tileWidth", config.tileWidth)
     this.tileHeight = requirePositiveInteger("tileHeight", config.tileHeight)
-    this.margin = config.margin ?? 0
-    this.spacing = config.spacing ?? 0
-    this.firstGid = config.firstGid ?? 1
+    this.margin = config.margin
+    this.spacing = config.spacing
+    this.firstGid = config.firstGid
     this.imageElement = imageElement
     this.imageWidth = imageElement.width
     this.imageHeight = imageElement.height

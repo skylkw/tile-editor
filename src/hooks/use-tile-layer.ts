@@ -23,7 +23,12 @@ export function useTileLayer(engineRef: RefObject<LeaferEngine | null>) {
     if (!engine) return null
 
     if (!layerRef.current) {
-      layerRef.current = new TileLayer(engine)
+      layerRef.current = new TileLayer(engine, {
+        id: "default-layer",
+        name: "Tile Layer",
+        visible: true,
+        order: 0,
+      })
       return layerRef.current
     }
 
