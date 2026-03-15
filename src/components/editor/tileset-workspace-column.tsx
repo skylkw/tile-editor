@@ -1,25 +1,17 @@
-import { App, Image, Rect, Path, PointerEvent as LeaferPointerEvent, Group, MoveEvent, ZoomEvent } from "leafer-ui"
+import { App, Image, Rect, Path, PointerEvent as LP, Group, MoveEvent, ZoomEvent } from "leafer-ui"
 import "@leafer-in/viewport"
 import { useEffect, useRef, useState } from "react"
 import type { Tileset } from "@/core/tilemap/tileset"
 import globalConfig from "@/config.json"
 import { Button } from "@/components/ui/button"
 
-type TilesetWorkspaceColumnProps = {
-  // Library Props
+type Props = {
   tilesets: Tileset[]
-  activeTileset: Tileset | null
-  loadingTileset: boolean
-  onLoadTileset: () => void
-  onSelectTileset: (key: string) => void
-  getTilesetKey: (tileset: { sourcePath?: string; name: string }) => string
-  
-  // Preview Props
-  sourcePath: string
   selectedTileGids: number[]
   onSelectTiles: (gids: number[]) => void
-
-  // Brush Props
+  getTilesetKey: (ts: { sourcePath?: string; name: string }) => string
+  loadingTileset: boolean
+  onLoadTileset: () => void
   brushSummary: string
   onClearActiveLayer: () => void
   onRotateCW: () => void
@@ -29,297 +21,288 @@ type TilesetWorkspaceColumnProps = {
   onResetTransform: () => void
 }
 
-export function TilesetWorkspaceColumn(props: TilesetWorkspaceColumnProps) {
-  const { 
-    activeTileset, sourcePath, selectedTileGids, onSelectTiles,
-    tilesets, loadingTileset, onLoadTileset, onSelectTileset, getTilesetKey,
-    brushSummary, onClearActiveLayer, onRotateCW, onRotateCCW, onFlipX, onFlipY, onResetTransform
+export function TilesetWorkspaceColumn(props: Props) {
+  const {
+    tilesets, selectedTileGids, onSelectTiles, getTilesetKey,
+    loadingTileset, onLoadTileset,
+    brushSummary, onClearActiveLayer, onRotateCW, onRotateCCW, onFlipX, onFlipY, onResetTransform,
   } = props
 
   const viewRef = useRef<HTMLDivElement>(null)
   const appRef = useRef<App | null>(null)
-  const selectionRectRef = useRef<Rect | null>(null)
-  
   const [zoom, setZoom] = useState(100)
-  
-  // Custom drag selection states
-  const isDraggingRef = useRef(false)
-  const startGidRef = useRef<number | null>(null)
+
+  // Persistent positions per tileset key
+  const posRef = useRef<Map<string, { x: number; y: number }>>(new Map())
+  const selRectsRef = useRef<Map<string, Rect>>(new Map())
+  const groupsRef = useRef<Map<string, Group>>(new Map())
+
+  // Drag refs
+  const tilesDragging = useRef(false)
+  const tsDragging = useRef(false)
+  const dragKey = useRef<string | null>(null)
+  const dragTileset = useRef<Tileset | null>(null)
+  const startGid = useRef<number | null>(null)
+  const dragGroupStart = useRef({ x: 0, y: 0 })
+  const dragMouseStart = useRef({ x: 0, y: 0 })
+  const altDown = useRef(false)
+
+  // Stable callback ref
+  const cbRef = useRef(onSelectTiles)
+  cbRef.current = onSelectTiles
 
   useEffect(() => {
-    if (!viewRef.current || !activeTileset) return
+    if (!viewRef.current) return
+    appRef.current?.destroy()
+    selRectsRef.current.clear()
+    groupsRef.current.clear()
+    if (!tilesets.length) { appRef.current = null; return }
 
     const app = new App({
       view: viewRef.current,
       tree: { type: "custom" },
       ground: { type: "design", hittable: false },
-      zoom: { min: 0.1, max: 10 },
+      zoom: { min: 0.05, max: 10 },
       smooth: false,
     })
 
-    const { tileWidth, tileHeight, margin, spacing, columns, rows, firstGid } = activeTileset
+    const GAP = 24
+    let autoY = 0
+    const keys = tilesets.map(ts => getTilesetKey(ts))
 
-    const img = new Image({
-      url: activeTileset.image,
-      x: 0,
-      y: 0,
-      width: activeTileset.imageWidth,
-      height: activeTileset.imageHeight,
-    })
-
-    const gridGroup = new Group({ x: 0, y: 0, opacity: 0.3 })
-    const gridPath = new Path({
-      stroke: "rgba(255, 255, 255, 0.4)",
-      strokeWidth: 1,
-      x: 0,
-      y: 0,
-    })
-    
-    let pathData = ""
-    for (let c = 0; c <= columns; c++) {
-      const x = margin + c * (tileWidth + spacing)
-      pathData += `M ${x} ${margin} L ${x} ${margin + rows * (tileHeight + spacing)} `
+    // Auto-layout for new tilesets
+    for (let i = 0; i < tilesets.length; i++) {
+      if (!posRef.current.has(keys[i])) {
+        posRef.current.set(keys[i], { x: 0, y: autoY })
+      }
+      autoY += tilesets[i].imageHeight + GAP
     }
-    for (let r = 0; r <= rows; r++) {
-      const y = margin + r * (tileHeight + spacing)
-      pathData += `M ${margin} ${y} L ${margin + columns * (tileWidth + spacing)} ${y} `
+
+    // Build Leafer nodes per tileset
+    for (let i = 0; i < tilesets.length; i++) {
+      const ts = tilesets[i], key = keys[i]
+      const p = posRef.current.get(key)!
+      const g = new Group({ x: p.x, y: p.y })
+
+      // Image
+      g.add(new Image({ url: ts.image, width: ts.imageWidth, height: ts.imageHeight }))
+
+      // Grid
+      if (ts.tileWidth >= 8) {
+        const gp = new Path({ stroke: "rgba(255,255,255,0.35)", strokeWidth: 1 })
+        let d = ""
+        for (let c = 0; c <= ts.columns; c++) {
+          const x = ts.margin + c * (ts.tileWidth + ts.spacing)
+          d += `M ${x} ${ts.margin} L ${x} ${ts.margin + ts.rows * (ts.tileHeight + ts.spacing)} `
+        }
+        for (let r = 0; r <= ts.rows; r++) {
+          const y = ts.margin + r * (ts.tileHeight + ts.spacing)
+          d += `M ${ts.margin} ${y} L ${ts.margin + ts.columns * (ts.tileWidth + ts.spacing)} ${y} `
+        }
+        gp.path = d
+        const gg = new Group({ opacity: 0.25 }); gg.add(gp); g.add(gg)
+      }
+
+      // Selection rect
+      const sr = new Rect({
+        x: 0, y: 0, width: 0, height: 0,
+        fill: globalConfig.theme.stampPreviewTint.fill,
+        stroke: globalConfig.theme.hoverOutline.stroke,
+        strokeWidth: globalConfig.theme.hoverOutline.strokeWidth,
+        visible: false, hittable: false,
+      })
+      g.add(sr)
+      selRectsRef.current.set(key, sr)
+
+      // Interaction layer
+      const il = new Rect({
+        x: 0, y: 0, width: ts.imageWidth, height: ts.imageHeight,
+        fill: "transparent", cursor: "crosshair",
+      })
+      g.add(il)
+
+      // Tile selection helpers
+      const selectBetween = (gA: number, gB: number) => {
+        const a = ts.getTileDescriptor(gA), b = ts.getTileDescriptor(gB)
+        if (!a || !b) return
+        const c0 = Math.min(a.column, b.column), c1 = Math.max(a.column, b.column)
+        const r0 = Math.min(a.row, b.row), r1 = Math.max(a.row, b.row)
+        const gids: number[] = []
+        for (let r = r0; r <= r1; r++)
+          for (let c = c0; c <= c1; c++)
+            gids.push(ts.firstGid + r * ts.columns + c)
+        cbRef.current(gids)
+      }
+
+      il.on(LP.DOWN, (e: LP) => {
+        if (altDown.current) {
+          // Start dragging tileset image
+          tsDragging.current = true
+          dragKey.current = key
+          dragGroupStart.current = { x: g.x as number, y: g.y as number }
+          // Capture clientX/Y from native event
+          const ne = (e as unknown as { origin?: PointerEvent }).origin
+          dragMouseStart.current = { x: ne?.clientX ?? 0, y: ne?.clientY ?? 0 }
+          e.stop?.()
+          return
+        }
+        // Tile selection
+        tilesDragging.current = true
+        dragTileset.current = ts
+        const loc = il.getLocalPoint(e)
+        const tile = ts.getTileAtImagePoint(loc.x, loc.y)
+        startGid.current = tile ? tile.gid : null
+        if (tile) cbRef.current([tile.gid])
+      })
+
+      il.on(LP.MOVE, (e: LP) => {
+        if (!tilesDragging.current || dragTileset.current !== ts || startGid.current === null) return
+        const loc = il.getLocalPoint(e)
+        const tile = ts.getTileAtImagePoint(loc.x, loc.y)
+        if (tile) selectBetween(startGid.current, tile.gid)
+      })
+
+      app.tree.add(g)
+      groupsRef.current.set(key, g)
     }
-    gridPath.path = pathData
-    gridGroup.add(gridPath)
 
-    const selectionRect = new Rect({
-      x: 0, y: 0, width: 0, height: 0,
-      fill: globalConfig.theme.stampPreviewTint.fill,
-      stroke: globalConfig.theme.hoverOutline.stroke,
-      strokeWidth: globalConfig.theme.hoverOutline.strokeWidth,
-      cornerRadius: globalConfig.theme.hoverOutline.cornerRadius,
-      visible: false,
-      hittable: false
-    })
-    selectionRectRef.current = selectionRect
-
-    const interactionLayer = new Rect({
-      x: 0, y: 0, 
-      width: activeTileset.imageWidth, 
-      height: activeTileset.imageHeight,
-      fill: "transparent",
-      cursor: "crosshair",
+    // Global pointer up (tile selection)
+    app.on(LP.UP, () => {
+      tilesDragging.current = false
+      startGid.current = null
+      dragTileset.current = null
     })
 
-    app.tree.add(img)
-    if (tileWidth >= 8) app.tree.add(gridGroup)
-    app.tree.add(selectionRect)
-    app.tree.add(interactionLayer)
-    
+    // Tileset image dragging via window events
+    const onWinMove = (ev: MouseEvent) => {
+      if (!tsDragging.current || !dragKey.current) return
+      const g = groupsRef.current.get(dragKey.current)
+      if (!g) return
+      const s = (app.tree.zoomLayer.scaleX as number) || 1
+      g.set({
+        x: dragGroupStart.current.x + (ev.clientX - dragMouseStart.current.x) / s,
+        y: dragGroupStart.current.y + (ev.clientY - dragMouseStart.current.y) / s,
+      })
+    }
+    const onWinUp = () => {
+      if (tsDragging.current && dragKey.current) {
+        const g = groupsRef.current.get(dragKey.current)
+        if (g) posRef.current.set(dragKey.current, { x: g.x as number, y: g.y as number })
+      }
+      tsDragging.current = false
+      dragKey.current = null
+    }
+    window.addEventListener("mousemove", onWinMove)
+    window.addEventListener("mouseup", onWinUp)
+
+    // Zoom / Pan
     app.tree.on(MoveEvent.BEFORE_MOVE, (e: MoveEvent) => {
       const { x, y } = app.tree.getValidMove(e.moveX, e.moveY)
       app.tree.zoomLayer.move(x, y)
     })
     app.tree.on(ZoomEvent.BEFORE_ZOOM, (e: ZoomEvent) => {
-      const scale = app.tree.getValidScale(e.scale)
-      app.tree.zoomLayer.scaleOfWorld(e, scale)
+      const s = app.tree.getValidScale(e.scale)
+      app.tree.zoomLayer.scaleOfWorld(e, s)
     })
-    app.tree.on(ZoomEvent.ZOOM, () => {
-       setZoom(Math.round(app.tree.zoomLayer.scaleX as number * 100))
-    })
+    app.tree.on(ZoomEvent.ZOOM, () => setZoom(Math.round((app.tree.zoomLayer.scaleX as number) * 100)))
 
+    // Fit to view
     setTimeout(() => {
-      const rect = viewRef.current?.getBoundingClientRect()
-      if (!rect) return
-      const scale = Math.min(
-        (rect.width - 32) / (activeTileset.imageWidth || 1),
-        (rect.height - 32) / (activeTileset.imageHeight || 1),
-        1
-      )
-      const x = 16 + Math.max(0, (rect.width - 32 - activeTileset.imageWidth * scale) / 2)
-      const y = 16 + Math.max(0, (rect.height - 32 - activeTileset.imageHeight * scale) / 2)
-      app.tree.zoomLayer.set({ x, y, scaleX: scale, scaleY: scale })
-      setZoom(Math.round(scale * 100))
-    }, 10)
+      const r = viewRef.current?.getBoundingClientRect()
+      if (!r) return
+      let mw = 0, mh = 0
+      for (const ts of tilesets) {
+        const p = posRef.current.get(getTilesetKey(ts)) ?? { x: 0, y: 0 }
+        mw = Math.max(mw, p.x + ts.imageWidth)
+        mh = Math.max(mh, p.y + ts.imageHeight)
+      }
+      const s = Math.min((r.width - 32) / (mw || 1), (r.height - 32) / (mh || 1), 1)
+      app.tree.zoomLayer.set({
+        x: 16 + Math.max(0, (r.width - 32 - mw * s) / 2),
+        y: 16 + Math.max(0, (r.height - 32 - mh * s) / 2),
+        scaleX: s, scaleY: s,
+      })
+      setZoom(Math.round(s * 100))
+    }, 50)
 
-    let spacePressed = false;
+    // Alt key + cursor updates
     const onKey = (e: KeyboardEvent) => {
-      if (e.code === globalConfig.shortcuts.panKey) spacePressed = e.type === "keydown"
+      if (e.code === "AltLeft" || e.code === "AltRight") {
+        altDown.current = e.type === "keydown"
+        for (const g of groupsRef.current.values()) {
+          const last = g.children?.[g.children.length - 1]
+          if (last) (last as Rect).cursor = altDown.current ? "grab" : "crosshair"
+        }
+      }
     }
     window.addEventListener("keydown", onKey)
     window.addEventListener("keyup", onKey)
 
-    const getGidAt = (localX: number, localY: number) => {
-      const tile = activeTileset.getTileAtImagePoint(localX, localY)
-      return tile ? tile.gid : null
-    }
-
-    const selectTilesBetween = (gidA: number, gidB: number) => {
-      const tileA = activeTileset.getTileDescriptor(gidA)
-      const tileB = activeTileset.getTileDescriptor(gidB)
-      if (!tileA || !tileB) return
-
-      const minCol = Math.min(tileA.column, tileB.column)
-      const maxCol = Math.max(tileA.column, tileB.column)
-      const minRow = Math.min(tileA.row, tileB.row)
-      const maxRow = Math.max(tileA.row, tileB.row)
-
-      const gids: number[] = []
-      for (let r = minRow; r <= maxRow; r++) {
-        for (let c = minCol; c <= maxCol; c++) {
-          const index = r * columns + c
-          gids.push(firstGid + index)
-        }
-      }
-      onSelectTiles(gids)
-    }
-
-    interactionLayer.on(LeaferPointerEvent.DOWN, (e: LeaferPointerEvent) => {
-      if (spacePressed) return
-      isDraggingRef.current = true
-      
-      // Use local point relative to interactionLayer (image coordinates)
-      const local = interactionLayer.getLocalPoint(e)
-      startGidRef.current = getGidAt(local.x, local.y)
-      
-      if (startGidRef.current !== null) {
-        onSelectTiles([startGidRef.current])
-      }
-    })
-
-    interactionLayer.on(LeaferPointerEvent.MOVE, (e: LeaferPointerEvent) => {
-      if (!isDraggingRef.current || spacePressed || startGidRef.current === null) return
-      
-      const local = interactionLayer.getLocalPoint(e)
-      const currentGid = getGidAt(local.x, local.y)
-      
-      if (currentGid !== null) {
-        selectTilesBetween(startGidRef.current, currentGid)
-      }
-    })
-
-    const onPointerUp = () => {
-      isDraggingRef.current = false
-      startGidRef.current = null
-    }
-    app.on(LeaferPointerEvent.UP, onPointerUp)
-
     appRef.current = app
-
     return () => {
       window.removeEventListener("keydown", onKey)
       window.removeEventListener("keyup", onKey)
+      window.removeEventListener("mousemove", onWinMove)
+      window.removeEventListener("mouseup", onWinUp)
       app.destroy()
       appRef.current = null
     }
-  }, [activeTileset, onSelectTiles])
+  }, [tilesets, getTilesetKey])
 
-  // Sync selection rect visually
+  // Sync selection highlight per tileset
   useEffect(() => {
-    if (!activeTileset || !selectionRectRef.current) return
-    const rectNode = selectionRectRef.current
-    if (!selectedTileGids.length) {
-      rectNode.visible = false
-      return
-    }
-
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
-    for (const gid of selectedTileGids) {
-      const r = activeTileset.getTileDescriptor(gid) // Fixed: using getTileDescriptor!
-      if (r) {
-        minX = Math.min(minX, r.x)
-        minY = Math.min(minY, r.y)
-        maxX = Math.max(maxX, r.x + r.width)
-        maxY = Math.max(maxY, r.y + r.height)
+    for (const r of selRectsRef.current.values()) r.visible = false
+    if (!selectedTileGids.length) return
+    for (const ts of tilesets) {
+      const k = getTilesetKey(ts), r = selRectsRef.current.get(k)
+      if (!r) continue
+      const gids = selectedTileGids.filter(g => g >= ts.firstGid && g <= ts.lastGid)
+      if (!gids.length) continue
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
+      for (const gid of gids) {
+        const d = ts.getTileDescriptor(gid)
+        if (d) { x0 = Math.min(x0, d.x); y0 = Math.min(y0, d.y); x1 = Math.max(x1, d.x + d.width); y1 = Math.max(y1, d.y + d.height) }
       }
+      if (x0 !== Infinity) r.set({ x: x0, y: y0, width: x1 - x0, height: y1 - y0, visible: true })
     }
+  }, [tilesets, selectedTileGids, getTilesetKey])
 
-    if (minX !== Infinity) {
-      rectNode.set({
-        x: minX, y: minY,
-        width: maxX - minX,
-        height: maxY - minY,
-        visible: true
-      })
-    } else {
-      rectNode.visible = false
-    }
-  }, [activeTileset, selectedTileGids])
-
-  const stampString = selectedTileGids.length > 1 ? `${selectedTileGids.length} Tiles Stamp` : ""
+  const stamp = selectedTileGids.length > 1 ? `${selectedTileGids.length} Tiles` : ""
 
   return (
     <div className="flex min-w-0 flex-col gap-3 h-full overflow-y-auto p-2">
-      {/* Tileset Selector + Actions Bar */}
       <div className="flex items-center gap-2">
-        {tilesets.length > 0 ? (
-          <select
-            title="Select Active Tileset"
-            value={activeTileset ? getTilesetKey(activeTileset) : ""}
-            onChange={(e) => onSelectTileset(e.target.value)}
-            className="flex-1 min-w-0 appearance-none rounded-lg border border-white/10 bg-slate-900 px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-teal-300/50"
-          >
-            <option disabled value="">选择 Tileset...</option>
-            {tilesets.map((ts, i) => (
-              <option key={getTilesetKey(ts)} value={getTilesetKey(ts)}>
-                {ts.name || `Tileset ${i + 1}`} ({ts.columns}x{ts.rows})
-              </option>
-            ))}
-          </select>
-        ) : (
-          <span className="flex-1 text-xs text-slate-500 px-1">无图集</span>
-        )}
-        <Button
-          onClick={onLoadTileset}
-          disabled={loadingTileset}
-          size="sm"
-          className="h-7 text-[10px] rounded-lg px-3 bg-teal-400/90 text-slate-950 hover:bg-teal-300 shrink-0"
-        >
-          导入
-        </Button>
-        <Button
-          onClick={onClearActiveLayer}
-          variant="outline"
-          size="sm"
-          className="h-7 text-[10px] rounded-lg px-2 border-white/10 text-slate-400 hover:text-white shrink-0"
-        >
-          清空
-        </Button>
+        <span className="flex-1 text-[10px] text-slate-500 px-1">{tilesets.length ? `${tilesets.length} 图集` : "无图集"}</span>
+        <Button onClick={onLoadTileset} disabled={loadingTileset} size="sm" className="h-7 text-[10px] rounded-lg px-3 bg-teal-400/90 text-slate-950 hover:bg-teal-300 shrink-0">导入</Button>
+        <Button onClick={onClearActiveLayer} variant="outline" size="sm" className="h-7 text-[10px] rounded-lg px-2 border-white/10 text-slate-400 hover:text-white shrink-0">清空</Button>
       </div>
 
-      {/* Tileset Leafer Preview - fills remaining space */}
-      {activeTileset ? (
-        <div className="flex-1 min-h-0 rounded-xl border border-white/10 bg-slate-950/70 p-1.5 flex flex-col">
-          <div className="mb-1.5 flex items-center justify-between text-[10px] px-1">
-            <span className="text-slate-500 truncate max-w-[60%]" title={sourcePath}>{sourcePath}</span>
-            <span className="text-slate-500 bg-white/5 px-1.5 py-0.5 rounded text-[9px]">Z: {zoom}%</span>
-          </div>
-          <div className="flex-1 min-h-0 overflow-hidden rounded-lg bg-slate-900 relative">
-            <div ref={viewRef} className="absolute inset-0" />
-            {stampString && (
-              <div className="pointer-events-none absolute bottom-1.5 right-1.5 rounded border border-teal-300/30 bg-teal-300/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-teal-100 backdrop-blur shadow-sm">
-                {stampString}
-              </div>
-            )}
-          </div>
+      <div className="flex-1 min-h-0 rounded-xl border border-white/10 bg-slate-950/70 p-1.5 flex flex-col">
+        <div className="mb-1.5 flex items-center justify-between text-[10px] px-1">
+          <span className="text-slate-500">{tilesets.length ? "Alt+拖移图集 | 左键选区 | 滚轮缩放" : "请导入图集"}</span>
+          <span className="text-slate-500 bg-white/5 px-1.5 py-0.5 rounded text-[9px]">Z: {zoom}%</span>
         </div>
-      ) : (
-        <div className="flex-1 min-h-0 flex items-center justify-center rounded-xl border border-dashed border-white/10 bg-slate-950/30 text-xs text-slate-500">
-          请先导入图集
+        <div className="flex-1 min-h-0 overflow-hidden rounded-lg bg-slate-900 relative">
+          <div ref={viewRef} className="absolute inset-0" />
+          {stamp && (
+            <div className="pointer-events-none absolute bottom-1.5 right-1.5 rounded border border-teal-300/30 bg-teal-300/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-teal-100 backdrop-blur">{stamp}</div>
+          )}
         </div>
-      )}
+      </div>
 
-      {/* Compact Brush Transform */}
       <div className="shrink-0 rounded-xl border border-cyan-300/10 bg-cyan-300/5 p-2.5">
         <div className="flex items-center justify-between mb-2">
           <span className="text-[10px] font-semibold uppercase tracking-wider text-cyan-200/80">Brush</span>
           <span className="text-[10px] text-cyan-100/50">{brushSummary}</span>
         </div>
         <div className="grid grid-cols-4 gap-1.5">
-          <button type="button" onClick={onRotateCCW} className="rounded-lg border border-white/10 bg-slate-900/50 py-1 text-[10px] text-slate-300 hover:bg-slate-800" title="逆时针旋转90°">↶</button>
-          <button type="button" onClick={onRotateCW} className="rounded-lg border border-white/10 bg-slate-900/50 py-1 text-[10px] text-slate-300 hover:bg-slate-800" title="顺时针旋转90°">↷</button>
+          <button type="button" onClick={onRotateCCW} className="rounded-lg border border-white/10 bg-slate-900/50 py-1 text-[10px] text-slate-300 hover:bg-slate-800" title="逆时针90°">↶</button>
+          <button type="button" onClick={onRotateCW} className="rounded-lg border border-white/10 bg-slate-900/50 py-1 text-[10px] text-slate-300 hover:bg-slate-800" title="顺时针90°">↷</button>
           <button type="button" onClick={onFlipX} className="rounded-lg border border-white/10 bg-slate-900/50 py-1 text-[10px] text-slate-300 hover:bg-slate-800" title="左右翻转">⇔</button>
           <button type="button" onClick={onFlipY} className="rounded-lg border border-white/10 bg-slate-900/50 py-1 text-[10px] text-slate-300 hover:bg-slate-800" title="上下翻转">⇕</button>
         </div>
         {brushSummary !== "Identity" && (
-          <button type="button" onClick={onResetTransform} className="mt-2 w-full rounded-lg border border-cyan-300/20 bg-cyan-300/10 py-1 text-[10px] text-cyan-100/80 hover:bg-cyan-300/20">
-            重置
-          </button>
+          <button type="button" onClick={onResetTransform} className="mt-2 w-full rounded-lg border border-cyan-300/20 bg-cyan-300/10 py-1 text-[10px] text-cyan-100/80 hover:bg-cyan-300/20">重置</button>
         )}
       </div>
     </div>

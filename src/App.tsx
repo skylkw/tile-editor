@@ -46,7 +46,6 @@ export default function App() {
     useState<GridConfig>(config.document)
   const [draftConfig, setDraftConfig] = useState<GridConfig>(config.document)
   const [mapPath, setMapPath] = useState("")
-  const [activeTilesetKey, setActiveTilesetKey] = useState("")
   const [selectedTileGids, setSelectedTileGids] = useState<number[]>([])
   const [selectedStamp, setSelectedStamp] = useState<TilesetStamp | null>(null)
   const [brushTransform, setBrushTransform] = useState<BrushTransformState>(
@@ -127,13 +126,12 @@ export default function App() {
     activeStamp: transformedStamp,
   })
 
+  // Derive active tileset from selected GIDs (all tilesets shown together)
   const activeTileset = useMemo(() => {
-    return (
-      tilesets.find((entry) => getTilesetKey(entry) === activeTilesetKey) ??
-      tilesets[0] ??
-      null
-    )
-  }, [activeTilesetKey, tilesets])
+    if (!selectedTileGids.length) return tilesets[0] ?? null
+    const gid = selectedTileGids[0]
+    return tilesets.find(ts => gid >= ts.firstGid && gid <= ts.lastGid) ?? tilesets[0] ?? null
+  }, [selectedTileGids, tilesets])
 
 
 
@@ -162,9 +160,6 @@ export default function App() {
     [brushTransform]
   )
 
-
-
-  const activeTilesetSourcePath = activeTileset?.sourcePath ?? activeTileset?.name ?? ""
 
 
 
@@ -224,26 +219,18 @@ export default function App() {
   )
 
   const applyLoadedTilesets = useCallback(
-    (nextTilesets: Tileset[], preferredKey?: string) => {
+    (nextTilesets: Tileset[]) => {
       setTilesets(nextTilesets)
-
-      const fallbackTileset = nextTilesets[0] ?? null
-      const nextActiveTileset =
-        nextTilesets.find((entry) => getTilesetKey(entry) === preferredKey) ??
-        fallbackTileset
-
-      setActiveTilesetKey(nextActiveTileset ? getTilesetKey(nextActiveTileset) : "")
-      selectTiles(nextActiveTileset?.listTileGids().slice(0, 1) ?? [])
+      const first = nextTilesets[0]
+      selectTiles(first?.listTileGids().slice(0, 1) ?? [])
     },
     [selectTiles, setTilesets]
   )
 
   const clearTilesets = useCallback(() => {
     setTilesets([])
-    setActiveTilesetKey("")
     setSelectedTileGids([])
     setSelectedStamp(null)
-
   }, [setTilesets])
 
 
@@ -293,7 +280,7 @@ export default function App() {
         nextFirstGid = nextTileset.lastGid + 1
       }
 
-      applyLoadedTilesets(nextTilesets, firstImportedKey)
+      applyLoadedTilesets(nextTilesets)
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "读取图集文件失败"
@@ -353,7 +340,7 @@ export default function App() {
           }))
 
         const nextTilesets = await createTilesetsFromSources(sources)
-        applyLoadedTilesets(nextTilesets, activeTilesetKey)
+        applyLoadedTilesets(nextTilesets)
       } catch (error) {
         clearTilesets()
         setErrorMessage(
@@ -364,7 +351,6 @@ export default function App() {
       }
     }
   }, [
-    activeTilesetKey,
     applyLoadedTilesets,
     clearTilesets,
     createTilesetsFromSources,
@@ -504,7 +490,7 @@ export default function App() {
 
       if (tilesetSources.length) {
         const nextTilesets = await createTilesetsFromSources(tilesetSources)
-        applyLoadedTilesets(nextTilesets, getTilesetKey(nextTilesets[0]))
+        applyLoadedTilesets(nextTilesets)
       } else {
         clearTilesets()
       }
@@ -556,14 +542,7 @@ export default function App() {
   }, [isDirty])
 
 
-  const handleSelectTileset = useCallback(
-    (key: string) => {
-      const nextTileset = tilesets.find((entry) => getTilesetKey(entry) === key)
-      setActiveTilesetKey(key)
-      selectTiles(nextTileset?.listTileGids().slice(0, 1) ?? [])
-    },
-    [selectTiles, tilesets]
-  )
+
 
   useEffect(() => {
     // URL 缓存清理逻辑已移除，因为不再使用 Blob URL
@@ -643,14 +622,11 @@ export default function App() {
         >
           <TilesetWorkspaceColumn
             tilesets={tilesets}
-            activeTileset={activeTileset}
-            loadingTileset={loadingTileset}
-            onLoadTileset={handleLoadTilesets}
-            onSelectTileset={handleSelectTileset}
-            getTilesetKey={getTilesetKey}
-            sourcePath={activeTilesetSourcePath}
             selectedTileGids={selectedTileGids}
             onSelectTiles={selectTiles}
+            getTilesetKey={getTilesetKey}
+            loadingTileset={loadingTileset}
+            onLoadTileset={handleLoadTilesets}
             brushSummary={brushSummary}
             onClearActiveLayer={clearActiveLayer}
             onRotateCW={handleRotateBrushClockwise}
