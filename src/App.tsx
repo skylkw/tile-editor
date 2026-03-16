@@ -110,8 +110,8 @@ export default function App() {
     setActiveLayerId,
     addLayer,
     removeLayer,
-    moveLayerUp,
-    moveLayerDown,
+    duplicateLayer,
+    reorderLayers,
     renameLayer,
     toggleLayerVisibility,
     setTilesets,
@@ -675,8 +675,8 @@ export default function App() {
             onSetActiveLayerId={setActiveLayerId}
             onAddLayer={addLayer}
             onRemoveLayer={removeLayer}
-            onMoveLayerUp={moveLayerUp}
-            onMoveLayerDown={moveLayerDown}
+            onDuplicateLayer={duplicateLayer}
+            onReorderLayers={reorderLayers}
             onRenameLayer={renameLayer}
             onToggleLayerVisibility={toggleLayerVisibility}
           />

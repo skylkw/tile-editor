@@ -21,8 +21,8 @@ type ProjectPanelProps = {
   onSetActiveLayerId: (id: string) => void
   onAddLayer: () => void
   onRemoveLayer: (id: string) => void
-  onMoveLayerUp: (id: string) => void
-  onMoveLayerDown: (id: string) => void
+  onDuplicateLayer: (id: string) => void
+  onReorderLayers: (ids: string[]) => void
   onRenameLayer: (id: string, name: string) => void
   onToggleLayerVisibility: (id: string) => void
 }
@@ -99,8 +99,8 @@ export function ProjectPanel(props: ProjectPanelProps) {
         onSetActiveLayerId={props.onSetActiveLayerId}
         onAddLayer={props.onAddLayer}
         onRemoveLayer={props.onRemoveLayer}
-        onMoveLayerUp={props.onMoveLayerUp}
-        onMoveLayerDown={props.onMoveLayerDown}
+        onDuplicateLayer={props.onDuplicateLayer}
+        onReorderLayers={props.onReorderLayers}
         onRenameLayer={props.onRenameLayer}
         onToggleLayerVisibility={props.onToggleLayerVisibility}
       />

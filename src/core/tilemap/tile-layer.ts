@@ -257,6 +257,21 @@ export class TileLayer {
     }
   }
 
+  /** 获取原始 GID 数据数组的拷贝 */
+  public getData() {
+    return new Uint32Array(this.tileData)
+  }
+
+  /** 覆盖原始 GID 数据并触发全量重绘 */
+  public setData(data: Uint32Array) {
+    if (data.length !== this.tileData.length) {
+      console.warn("TileLayer.setData: 数组长度不匹配", data.length, this.tileData.length)
+      return
+    }
+    this.tileData.set(data)
+    this.refresh()
+  }
+
   /** 彻底销毁该图层 */
   public destroy() {
     this.clear()

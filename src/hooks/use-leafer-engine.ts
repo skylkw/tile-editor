@@ -427,6 +427,54 @@ export function useLeaferEngine(config: UseLeaferEngineConfig) {
     [bumpRevision, commitLayers]
   )
 
+  const duplicateLayer = useCallback(
+    (layerId: string) => {
+      const sourceState = layerStatesRef.current.find((l) => l.id === layerId)
+      if (!sourceState) return null
+
+      const sourceInstance = layerInstancesRef.current.get(layerId)
+      if (!sourceInstance) return null
+
+      const nextIndex = layerIdCounterRef.current
+      layerIdCounterRef.current += 1
+
+      const nextLayerState: EditorLayerState = {
+        id: `layer-${nextIndex}`,
+        name: `${sourceState.name} (Copy)`,
+        visible: true,
+      }
+
+      const currentIndex = layerStatesRef.current.findIndex((l) => l.id === layerId)
+      const nextLayers = [...layerStatesRef.current]
+      nextLayers.splice(currentIndex + 1, 0, nextLayerState)
+
+      commitLayers(nextLayers, nextLayerState.id)
+      const nextInstance = ensureLayerInstance(nextLayerState.id)
+      if (nextInstance) {
+        nextInstance.setData(sourceInstance.getData())
+      }
+
+      bumpRevision()
+      return nextLayerState.id
+    },
+    [bumpRevision, commitLayers, ensureLayerInstance]
+  )
+
+  const reorderLayers = useCallback(
+    (nextLayerIds: string[]) => {
+      const currentLayers = layerStatesRef.current
+      const nextLayers = nextLayerIds
+        .map((id) => currentLayers.find((l) => l.id === id))
+        .filter((l): l is EditorLayerState => !!l)
+
+      if (nextLayers.length !== currentLayers.length) return
+
+      commitLayers(nextLayers, activeLayerIdRef.current)
+      bumpRevision()
+    },
+    [bumpRevision, commitLayers]
+  )
+
   const moveLayer = useCallback(
     (layerId: string, direction: -1 | 1) => {
       const currentLayers = [...layerStatesRef.current]
@@ -921,6 +969,8 @@ export function useLeaferEngine(config: UseLeaferEngineConfig) {
     setActiveLayerId,
     addLayer,
     removeLayer,
+    duplicateLayer,
+    reorderLayers,
     moveLayerUp,
     moveLayerDown,
     renameLayer,
