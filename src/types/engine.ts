@@ -48,6 +48,12 @@ export interface LeaferEngineConfig {
   view: HTMLDivElement
   grid: GridConfig
   viewport: ViewportConfig
+  /** 是否启用视口边界限制 */
+  useClamp?: boolean
+  /** 是否监听窗口大小变化自动适配 */
+  useResizeObserver?: boolean
+  /** 是否平滑缩放 */
+  smooth?: boolean
 }
 
 /**

@@ -550,7 +550,7 @@ export default function App() {
   }, [])
 
   return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-[radial-gradient(circle_at_top,#17304f_0%,#0a1220_45%,#04070d_100%)] text-slate-100">
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-[radial-gradient(circle_at_top,#17304f_0%,#0a1220_45%,#04070d_100%)] text-slate-100 select-none">
       <header className="border-b border-white/5 bg-slate-950/40 px-6 py-3 backdrop-blur-md">
         <div className="flex items-center justify-between gap-6">
           <div className="flex items-center gap-4">

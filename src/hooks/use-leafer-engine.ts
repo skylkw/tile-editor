@@ -1,5 +1,5 @@
 import globalConfig from "@/config.json"
-import { createLeaferEngine, LeaferEngine } from "@/core/engine/leafer-engine"
+import { LeaferEngine } from "@/core/engine/leafer-engine"
 import { buildTiledMap } from "@/core/io/tiled-map"
 import { TileLayer } from "@/core/tilemap/tile-layer"
 import { clearTiledGidFlags } from "@/core/tilemap/tiled-gid"
@@ -680,10 +680,12 @@ export function useLeaferEngine(config: UseLeaferEngineConfig) {
     const view = viewRef.current
     if (!view) return
 
-    const engine = createLeaferEngine({
+    const engine = new LeaferEngine({
       view,
       grid: resolvedDocument,
       viewport: viewport,
+      useClamp: true,
+      useResizeObserver: true
     })
 
     engineRef.current = engine
